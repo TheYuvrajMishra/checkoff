@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0D10",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.yuvrajmishra.checkoff",
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_DATA_SYNC",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "icon": "./assets/icon.png",
+    "ios": {
+      "bundleIdentifier": "com.yuvrajmishra.checkoff",
+      "supportsTablet": true
+    },
+    "name": "CheckOff",
+    "orientation": "portrait",
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0D10",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/alarm.wav"
+          ]
+        }
+      ],
+      "./plugins/with-alarm-boot",
+      "expo-audio",
+      "expo-sharing"
+    ],
+    "scheme": "checkoff",
+    "slug": "checkoff",
+    "userInterfaceStyle": "dark",
+    "version": "1.0.0",
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e1c4a8d5-ff3f-45fc-95d6-5105724e7b1d"
+      }
+    },
+    "owner": "aurio11s-team"
+  }
+}
