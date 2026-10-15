@@ -72,8 +72,9 @@ jobs:
             echo "CHECKOFF_KEY_ALIAS=${ANDROID_KEY_ALIAS}"
             echo "CHECKOFF_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}"
           } >> android/gradle.properties
-          # Patch build.gradle to use the release signing config.
-          python3 scripts/patch-release-signing.py
+          # TEMP-DIAG: skip patch to bisect the node failure
+          # python3 scripts/patch-release-signing.py
+          echo "signing patch skipped for bisection"
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
