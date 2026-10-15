@@ -11,6 +11,7 @@ import { setMeta, META_KEYS } from '../db/repos/meta';
 import { useUiStore, type HapticIntensity, type ThemeName } from '../state/ui';
 import { configureHaptics } from '../haptics';
 import { dark, light, space, TAP, type as type } from '../theme/tokens';
+import { updaterActions, useUpdaterStore } from '../updates/updaterStore';
 import pkg from '../../package.json';
 
 const GRACE_OPTIONS = [5, 10, 15, 30];
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   const db = useDb();
   const ui = useUiStore();
   const palette = ui.theme === 'dark' ? dark : light;
+  const { phase, checking } = useUpdaterStore();
 
   const persist = useCallback(
     async (key: string, value: string) => {
@@ -164,8 +166,31 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Version</Text>
-          <Text style={styles.rowValue}>{pkg.version}</Text>
+          <Text style={styles.rowValue}>
+            {updaterActions.installedVersionName} ({pkg.version})
+          </Text>
         </View>
+        <View style={styles.divider} />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void updaterActions.runCheck(true)}
+          style={styles.row}
+        >
+          <View style={styles.rowTextWrap}>
+            <Text style={styles.rowLabel}>Check for updates</Text>
+            <Text style={styles.rowHint}>
+              {checking
+                ? 'Checking'
+                : phase.kind === 'available'
+                  ? `Update available ${phase.release.versionName}`
+                  : phase.kind === 'downloading'
+                    ? `Downloading ${Math.round(phase.progress * 100)}%`
+                    : phase.kind === 'failed'
+                      ? 'Last check failed — tap to retry'
+                      : 'Up to date'}
+            </Text>
+          </View>
+        </Pressable>
         <View style={styles.divider} />
         <View style={styles.row}>
           <Text style={styles.rowValue}>Data stays on this device. No accounts, no network.</Text>

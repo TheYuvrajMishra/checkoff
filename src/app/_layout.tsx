@@ -21,6 +21,8 @@ import {
 } from '../notifications';
 import { reconcileTimers } from '../timers';
 import { configureHaptics } from '../haptics';
+import { UpdateBanner } from '../updates/UpdateBanner';
+import { updaterActions } from '../updates/updaterStore';
 
 /**
  * Startup data tasks. Every step is individually guarded so a failure
@@ -107,6 +109,9 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
         await runStartupTasks(db);
       }
 
+      // In-app update check (Android, throttled to once per 6h internally).
+      void updaterActions.runCheck();
+
       const onOnboarding = (segments as unknown as string[]).includes('onboarding');
       if (onboarded !== '1' && !onOnboarding) {
         router.replace('/onboarding');
@@ -114,10 +119,11 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
     })();
 
     // Foreground: re-run startup tasks (midnight rollover, timezone change,
-    // alarm ledger reconciliation after reboot).
+    // alarm ledger reconciliation after reboot) + throttled update check.
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void runStartupTasks(db);
+        void updaterActions.runCheck();
       }
     });
 
@@ -141,14 +147,19 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {});
 
-    return () => {
+  return () => {
       appStateSub.remove();
       linkSub.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <>{children}</>;
+  return (
+    <>
+      <UpdateBanner />
+      {children}
+    </>
+  );
 }
 
 export default function RootLayout() {

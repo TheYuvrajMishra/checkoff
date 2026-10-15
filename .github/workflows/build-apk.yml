@@ -5,6 +5,11 @@ on:
     branches: [master, main]
   workflow_dispatch:
 
+env:
+  # Versioning: versionCode = run number, version name = 1.0.<run number>.
+  APP_VERSION_CODE: ${{ github.run_number }}
+  APP_VERSION_NAME: 1.0.${{ github.run_number }}
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -27,11 +32,70 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
       - name: Install dependencies
         run: npm ci
 
       - name: Expo prebuild (Android)
         run: npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Configure release signing
+        run: |
+          # Decode the release keystore from the repo secret (never committed).
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/checkoff-release.keystore
+          # Point the release build type at the release keystore via gradle.properties.
+          cat >> android/gradle.properties <<'EOF'
+          CHECKOFF_STORE_FILE=checkoff-release.keystore
+          CHECKOFF_STORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}
+          CHECKOFF_KEY_ALIAS=${ANDROID_KEY_ALIAS}
+          CHECKOFF_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}
+          EOF
+          # Patch build.gradle: replace the debug signing on release with ours.
+          python3 - <<'PYEOF'
+          import re
+          p = 'android/app/build.gradle'
+          s = open(p).read()
+          # Add a release signing config after the debug block
+          s = s.replace(
+              """        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }""",
+              """        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        release {
+            storeFile file(findProperty('CHECKOFF_STORE_FILE') ?: 'checkoff-release.keystore')
+            storePassword findProperty('CHECKOFF_STORE_PASSWORD') ?: ''
+            keyAlias findProperty('CHECKOFF_KEY_ALIAS') ?: 'checkoff'
+            keyPassword findProperty('CHECKOFF_KEY_PASSWORD') ?: ''
+        }""",
+          )
+          # Use the release signing config for the release build type
+          s = s.replace(
+              "signingConfig signingConfigs.debug\n            def enableShrinkResources",
+              "signingConfig signingConfigs.release\n            def enableShrinkResources",
+          )
+          open(p, 'w').write(s)
+          print('signing patched')
+          PYEOF
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -43,32 +107,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Build release APK
+      - name: Build release APK (arm64 only)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
-        env:
-          # Release builds are signed with the debug keystore (Expo default template).
-          # For Play Store distribution, replace with a dedicated release keystore.
-          ORG_GRADLE_PROJECT_android_enableShrinkResourcesInReleaseBuilds: "false"
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
-      - name: Locate APK
-        id: apk
+      - name: Rename APK
         run: |
-          APK=$(find android/app/build/outputs/apk/release -name "app-release.apk" | head -1)
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
-          ls -lh "$APK"
+          cp android/app/build/outputs/apk/release/app-release.apk checkoff.apk
+          ls -lh checkoff.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: CheckOff-APK
-          path: ${{ steps.apk.outputs.path }}
+          path: checkoff.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: CheckOff v1.0.${{ github.run_number }}
-          files: ${{ steps.apk.outputs.path }}
+          files: checkoff.apk
+          make_latest: true
