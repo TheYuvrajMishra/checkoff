@@ -80,6 +80,16 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      - name: Diagnose Gradle node commands
+        run: |
+          cd android
+          echo "=== resolveAppEntry ==="
+          node -e "require('expo/scripts/resolveAppEntry')" .. android absolute || echo "FAILED: resolveAppEntry"
+          echo "=== react-native ==="
+          node --print "require.resolve('react-native/package.json')" || echo "FAILED: react-native"
+          echo "=== expo cli ==="
+          node --print "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })" || echo "FAILED: expo cli"
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -94,7 +104,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a --stacktrace
 
       - name: Rename APK
         run: |
