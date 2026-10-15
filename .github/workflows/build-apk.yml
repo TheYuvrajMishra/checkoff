@@ -128,3 +128,10 @@ jobs:
           name: CheckOff v1.0.${{ github.run_number }}
           files: checkoff.apk
           make_latest: true
+          body: |
+            CheckOff v1.0.${{ github.run_number }} — Android release (arm64).
+
+            Install: download checkoff.apk and open it. If you have an older
+            CheckOff build, the in-app updater will prompt you automatically.
+
+            Signed with the CheckOff release key.

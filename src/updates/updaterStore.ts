@@ -112,6 +112,10 @@ export const updaterActions = {
             } catch {
               // best-effort
             }
+            // Keep phase as 'downloaded' so the user can retry after
+            // granting the permission (banner shows Install again).
+            // Do not mark as failed.
+            return;
           }
           state = { ...state, phase: { kind: 'failed', release, error: msg } };
           emit();
@@ -134,6 +138,32 @@ export const updaterActions = {
     const p = state.phase;
     if (p.kind === 'downloading') {
       state = { ...state, phase: { kind: 'available', release: p.release } };
+      emit();
+    }
+  },
+
+  /**
+   * Retry the system installer for an already-downloaded APK.
+   * Called automatically on foreground return (after the user grants
+   * "Install unknown apps"), and from the banner's Install button.
+   */
+  async retryInstall() {
+    const p = state.phase;
+    if (p.kind !== 'downloaded') return;
+    try {
+      await installApk(p.fileUri);
+    } catch (e) {
+      const msg = String((e as any)?.message ?? e);
+      if (/permission|not allowed|unknown/i.test(msg)) {
+        try {
+          await openUnknownSourcesSettings();
+        } catch {
+          // best-effort
+        }
+        // Stay in 'downloaded' so the user can try again.
+        return;
+      }
+      state = { ...state, phase: { kind: 'failed', release: p.release, error: msg } };
       emit();
     }
   },

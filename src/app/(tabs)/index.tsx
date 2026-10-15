@@ -321,7 +321,7 @@ export default function TodayScreen() {
         {/* Skill slot */}
         {slot && (slot.skill || slot.category) && (
           <View>
-            <Text style={[styles.caption, { color: theme.textFaint }]}>TODAY'S SKILL</Text>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>TODAY&apos;S SKILL</Text>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <View style={styles.slotHeader}>
                 <View style={{ flex: 1 }}>

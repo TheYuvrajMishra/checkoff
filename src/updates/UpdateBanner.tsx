@@ -6,7 +6,7 @@
  * download progress bar, retry on failure, and a "skip this version" option.
  * No emoji.
  */
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useUiStore } from '../state/ui';
 import { dark, light, space, TAP, type as type } from '../theme/tokens';
 import { updaterActions, useUpdaterStore } from './updaterStore';
@@ -25,7 +25,7 @@ export function UpdateBanner() {
     <View style={styles.wrap} accessibilityRole="alert">
       <View style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.title}>Update available {release.versionName}</Text>
+          <Text style={styles.title}>Update available v{release.versionName}</Text>
         </View>
         {release.changelog ? (
           <Text style={styles.changelog} numberOfLines={4}>
@@ -75,8 +75,16 @@ export function UpdateBanner() {
 
         {phase.kind === 'downloaded' && (
           <View style={styles.actions}>
-            <ActivityIndicator size="small" color={palette.accent} />
-            <Text style={styles.btnText}>Opening installer</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={updaterActions.retryInstall}
+              style={[styles.btn, styles.btnPrimary]}
+            >
+              <Text style={styles.btnPrimaryText}>Install</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
+              <Text style={styles.btnText}>Later</Text>
+            </Pressable>
           </View>
         )}
 

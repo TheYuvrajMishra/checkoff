@@ -68,7 +68,7 @@ export default function TimerScreen() {
   const [durationMin, setDurationMin] = useState(25);
   const [skills, setSkills] = useState<SkillChip[]>([]);
   const [skillId, setSkillId] = useState<string | null>(params.skillId ?? null);
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [finishedSession, setFinishedSession] = useState<TimerSession | null>(null);
   const [markedDone, setMarkedDone] = useState(false);
 
@@ -372,7 +372,8 @@ export default function TimerScreen() {
           <Text style={styles.clock}>Done</Text>
           <Text style={styles.dim}>
             {formatClock(
-              (new Date(finishedSession.endedAtUtc ?? Date.now()).getTime() -
+              // endedAtUtc is always set for a finished session; fallback to startedAtUtc (0 duration) for purity
+              (new Date(finishedSession.endedAtUtc ?? finishedSession.startedAtUtc).getTime() -
                 new Date(finishedSession.startedAtUtc).getTime())
             )}{' '}
             focused

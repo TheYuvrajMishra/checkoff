@@ -120,10 +120,13 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
 
     // Foreground: re-run startup tasks (midnight rollover, timezone change,
     // alarm ledger reconciliation after reboot) + throttled update check.
+    // Also retry a pending APK install (user may have just granted
+    // "Install unknown apps" and returned).
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void runStartupTasks(db);
         void updaterActions.runCheck();
+        void updaterActions.retryInstall();
       }
     });
 

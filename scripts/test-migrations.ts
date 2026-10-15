@@ -36,9 +36,15 @@ async function main() {
   execSync(`sqlite3 ${tmpDb} < ${tmpDb}.sql`);
   sqlite(`PRAGMA user_version = 1;`);
 
-  // Insert representative user data into v1 tables. Table names come from v1.
+  // Insert representative user data into v1 tables.
   const tables = sqlite(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';`);
   console.log('v1 tables:', tables.trim().split('\n').join(', '));
+
+  const now = new Date().toISOString();
+  sqlite(`INSERT INTO categories (id, name, color_token, rotation_enabled, created_at, updated_at) VALUES ('cat1', 'Health', 'green', 1, '${now}', '${now}');`);
+  sqlite(`INSERT INTO task_templates (id, title, category_id, duration_min, recurrence, is_ritual, enabled, created_at, updated_at) VALUES ('tpl1', 'Morning run', 'cat1', 30, 'daily', 1, 1, '${now}', '${now}');`);
+  sqlite(`INSERT INTO task_instances (id, template_id, date, title, category_id, duration_min, is_ritual, status, created_at, updated_at) VALUES ('inst1', 'tpl1', '2026-10-15', 'Morning run', 'cat1', 30, 1, 'done', '${now}', '${now}');`);
+  console.log('inserted representative v1 user data');
 
   // 2. Run the app's real migrateDb against it using a minimal adapter.
   // migrateDb expects an expo-sqlite SQLiteDatabase; emulate the two methods
@@ -65,6 +71,14 @@ async function main() {
   if (parseInt(ver, 10) !== latest) {
     throw new Error(`Migration incomplete: at ${ver}, expected ${latest}`);
   }
+  // Verify the v1 user data survived the migration.
+  const catName = sqlite(`SELECT name FROM categories WHERE id='cat1';`).trim();
+  const tplTitle = sqlite(`SELECT title FROM task_templates WHERE id='tpl1';`).trim();
+  const instStatus = sqlite(`SELECT status FROM task_instances WHERE id='inst1';`).trim();
+  if (catName !== 'Health') throw new Error(`categories data lost: got '${catName}'`);
+  if (tplTitle !== 'Morning run') throw new Error(`task_templates data lost: got '${tplTitle}'`);
+  if (instStatus !== 'done') throw new Error(`task_instances data lost: got '${instStatus}'`);
+  console.log('v1 user data verified intact after migration.');
   console.log('MIGRATION TEST PASSED — data-preserving forward migration verified.');
 
   fs.unlinkSync(tmpDb);
