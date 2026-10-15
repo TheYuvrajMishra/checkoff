@@ -43,6 +43,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Inject version (run number)
+        run: |
+          python3 - <<'PYEOF'
+          import json, os
+          run = os.environ.get('GITHUB_RUN_NUMBER', '1')
+          p = 'app.json'
+          d = json.load(open(p))
+          d['expo']['version'] = f'1.0.{run}'
+          d['expo']['android']['versionCode'] = int(run)
+          d['expo']['ios']['buildNumber'] = str(run)
+          json.dump(d, open(p, 'w'), indent=2)
+          open(p, 'a').write('\n')
+          print(f"version=1.0.{run} versionCode={run}")
+          PYEOF
+
       - name: Expo prebuild (Android)
         run: npx expo prebuild --platform android --clean --non-interactive
 
