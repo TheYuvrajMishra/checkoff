@@ -34,10 +34,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Patch expo-constants Gradle script
-        # The expo-constants Gradle script runs node during configuration to
-        # locate its own directory, which fails in CI. Use a hardcoded path.
-        run: python3 scripts/patch-expo-constants.py
+      - name: Patch Gradle node exec scripts
+        # Several Gradle scripts run `node` during configuration via
+        # providers.exec, which fails in CI. Use hardcoded paths instead.
+        run: python3 scripts/patch-gradle-node-exec.py
 
       - name: Inject version (run number)
         run: |
