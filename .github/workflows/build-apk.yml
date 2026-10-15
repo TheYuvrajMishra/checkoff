@@ -35,25 +35,9 @@ jobs:
         run: npm ci
 
       - name: Patch expo-constants Gradle script
-        run: |
-          # The expo-constants Gradle script runs node during configuration to
-          # locate its own directory. This fails in CI for unknown reasons.
-          # Patch it to use a hardcoded path instead.
-          python3 - <<'PYEOF'
-          p = 'node_modules/expo-constants/scripts/get-app-config-android.gradle'
-          s = open(p).read()
-          old = '''def expoConstantsDir = project.providers.exec {
-            workingDir(projectDir)
-            commandLine("node", "-e", "console.log(require('path').dirname(require.resolve('expo-constants/package.json')));")
-          }.standardOutput.asText.get().trim()'''
-          new = '''def expoConstantsDir = new File(rootProject.projectDir, "../node_modules/expo-constants").getCanonicalPath()'''
-          if old in s:
-              s = s.replace(old, new)
-              open(p, 'w').write(s)
-              print('patched expo-constants gradle script')
-          else:
-              print('pattern not found, skipping')
-          PYEOF
+        # The expo-constants Gradle script runs node during configuration to
+        # locate its own directory, which fails in CI. Use a hardcoded path.
+        run: python3 scripts/patch-expo-constants.py
 
       - name: Inject version (run number)
         run: |
