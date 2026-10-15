@@ -106,28 +106,9 @@ jobs:
 
       - name: Build release APK (arm64 only)
         run: |
-          # Wrap node to log all invocations with exit codes (debug Gradle failure)
-          REAL_NODE=$(which node)
-          cat > /tmp/node <<'WRAPPER'
-          #!/bin/bash
-          echo "NODE_CALL: $@" >> /tmp/node-calls.log
-          echo "NODE_CWD: $(pwd)" >> /tmp/node-calls.log
-          OUTPUT=$(/opt/hostedtoolcache/node/22.23.3/x64/bin/node "$@" 2>&1)
-          CODE=$?
-          echo "NODE_EXIT: $CODE" >> /tmp/node-calls.log
-          if [ $CODE -ne 0 ]; then
-            echo "NODE_OUTPUT: $OUTPUT" | head -c 2000 >> /tmp/node-calls.log
-          fi
-          echo "$OUTPUT"
-          exit $CODE
-          WRAPPER
-          chmod +x /tmp/node
-          export PATH="/tmp:$PATH"
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a || true
-          echo "=== NODE CALLS WITH EXIT CODES ==="
-          grep -A2 "NODE_CALL.*mirror-kotlin" /tmp/node-calls.log || cat /tmp/node-calls.log | tail -30
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a --stacktrace
 
       - name: Rename APK
         run: |

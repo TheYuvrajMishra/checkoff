@@ -6,6 +6,9 @@ Several Expo/React Native Gradle scripts use `project.providers.exec` to run
 `node` during configuration. This fails in CI for unknown reasons (works in
 bash). Patch them to use hardcoded paths instead.
 
+Also patches the expo-modules-autolinking mirror-kotlin-inline-modules command
+to be a no-op, as it fails in CI when trying to write to node_modules.
+
 Run after `npm ci` (node_modules must exist).
 """
 import sys
@@ -40,6 +43,66 @@ PATCHES = [
 ]
 
 
+def patch_mirror_kotlin():
+    """Make mirror-kotlin-inline-modules a no-op (fails in CI) and pre-generate the expected output."""
+    p = 'node_modules/expo-modules-autolinking/build/commands/mirrorKotlinInlineModulesCommand.js'
+    try:
+        with open(p) as f:
+            s = f.read()
+    except FileNotFoundError:
+        print(f"{p} not found, skipping", file=sys.stderr)
+        return False
+    old_action = ".action(async (commandArguments) => {"
+    new_action = ".action(async (commandArguments) => { return; /* patched: skip in CI */"
+    if old_action in s and 'patched: skip in CI' not in s:
+        s = s.replace(old_action, new_action, 1)
+        with open(p, 'w') as f:
+            f.write(s)
+        print(f"patched: {p} (no-op)")
+    elif 'patched: skip in CI' in s:
+        print(f"already patched: {p}")
+    else:
+        print(f"action pattern not found in {p}", file=sys.stderr)
+        return False
+    # Pre-generate the empty ExpoInlineModulesList.java that the build expects
+    import os
+    out_dir = 'node_modules/expo/android/build/inline/modules'
+    os.makedirs(out_dir, exist_ok=True)
+    out_file = os.path.join(out_dir, 'ExpoInlineModulesList.java')
+    content = """package inline.modules;
+
+import org.jetbrains.annotations.NotNull;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import expo.modules.kotlin.ModulesProvider;
+import expo.modules.kotlin.modules.Module;
+import expo.modules.kotlin.services.Service;
+
+public class ExpoInlineModulesList implements ModulesProvider {
+
+  @Override
+  public Map<Class<? extends Module>, String> getModulesMap() {
+    return Map.of(
+
+    );
+  }
+
+  @Override
+  public List<Class<? extends @NotNull Service>> getServices() {
+    return new ArrayList<>();
+  }
+}
+
+"""
+    with open(out_file, 'w') as f:
+        f.write(content)
+    print(f"generated: {out_file}")
+    return True
+
+
 def main() -> None:
     failed = False
     for p in PATCHES:
@@ -60,6 +123,8 @@ def main() -> None:
         with open(p['path'], 'w') as f:
             f.write(s)
         print(f"patched: {p['path']}")
+    if not patch_mirror_kotlin():
+        failed = True
     sys.exit(1 if failed else 0)
 
 
