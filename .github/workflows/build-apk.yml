@@ -101,9 +101,16 @@ jobs:
 
       - name: Build release APK (arm64 only)
         run: |
+          # Wrap node to log all invocations (debug the Gradle node failure)
+          REAL_NODE=$(which node)
+          printf '#!/bin/bash\necho "NODE: $@" >> /tmp/node-calls.log\necho "NODE_CWD: $(pwd)" >> /tmp/node-calls.log\nexec '"$REAL_NODE"' "$@"\n' > /tmp/node
+          chmod +x /tmp/node
+          export PATH="/tmp:$PATH"
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a --stacktrace
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a || true
+          echo "=== NODE CALLS ==="
+          cat /tmp/node-calls.log || echo "no log"
 
       - name: Rename APK
         run: |
