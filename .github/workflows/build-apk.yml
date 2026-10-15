@@ -34,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Ensure node_modules writable
+        # The Expo Gradle plugin writes generated files into node_modules
+        # (inline modules list). Ensure it's writable in CI.
+        run: chmod -R u+w node_modules
+
       - name: Patch Gradle node exec scripts
         # Several Gradle scripts run `node` during configuration via
         # providers.exec, which fails in CI. Use hardcoded paths instead.
@@ -101,16 +106,28 @@ jobs:
 
       - name: Build release APK (arm64 only)
         run: |
-          # Wrap node to log all invocations (debug the Gradle node failure)
+          # Wrap node to log all invocations with exit codes (debug Gradle failure)
           REAL_NODE=$(which node)
-          printf '#!/bin/bash\necho "NODE: $@" >> /tmp/node-calls.log\necho "NODE_CWD: $(pwd)" >> /tmp/node-calls.log\nexec '"$REAL_NODE"' "$@"\n' > /tmp/node
+          cat > /tmp/node <<'WRAPPER'
+          #!/bin/bash
+          echo "NODE_CALL: $@" >> /tmp/node-calls.log
+          echo "NODE_CWD: $(pwd)" >> /tmp/node-calls.log
+          OUTPUT=$(/opt/hostedtoolcache/node/22.23.3/x64/bin/node "$@" 2>&1)
+          CODE=$?
+          echo "NODE_EXIT: $CODE" >> /tmp/node-calls.log
+          if [ $CODE -ne 0 ]; then
+            echo "NODE_OUTPUT: $OUTPUT" | head -c 2000 >> /tmp/node-calls.log
+          fi
+          echo "$OUTPUT"
+          exit $CODE
+          WRAPPER
           chmod +x /tmp/node
           export PATH="/tmp:$PATH"
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a || true
-          echo "=== NODE CALLS ==="
-          cat /tmp/node-calls.log || echo "no log"
+          echo "=== NODE CALLS WITH EXIT CODES ==="
+          grep -A2 "NODE_CALL.*mirror-kotlin" /tmp/node-calls.log || cat /tmp/node-calls.log | tail -30
 
       - name: Rename APK
         run: |
