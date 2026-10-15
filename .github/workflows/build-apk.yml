@@ -24,21 +24,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
 
       - name: Install dependencies
         run: npm ci
@@ -89,6 +80,9 @@ jobs:
           node --print "require.resolve('react-native/package.json')" || echo "FAILED: react-native"
           echo "=== expo cli ==="
           node --print "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })" || echo "FAILED: expo cli"
+          echo "=== expo-constants (from its android dir) ==="
+          cd ../node_modules/expo-constants/android
+          node -e "console.log(require('path').dirname(require.resolve('expo-constants/package.json')));" || echo "FAILED: expo-constants"
 
       - name: Cache Gradle
         uses: actions/cache@v4
