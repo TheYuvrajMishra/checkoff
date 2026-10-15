@@ -51,46 +51,14 @@ jobs:
           # Decode the release keystore from the repo secret (never committed).
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/checkoff-release.keystore
           # Point the release build type at the release keystore via gradle.properties.
-          cat >> android/gradle.properties <<'EOF'
-          CHECKOFF_STORE_FILE=checkoff-release.keystore
-          CHECKOFF_STORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}
-          CHECKOFF_KEY_ALIAS=${ANDROID_KEY_ALIAS}
-          CHECKOFF_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}
-          EOF
-          # Patch build.gradle: replace the debug signing on release with ours.
-          python3 - <<'PYEOF'
-          import re
-          p = 'android/app/build.gradle'
-          s = open(p).read()
-          # Add a release signing config after the debug block
-          s = s.replace(
-              """        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }""",
-              """        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }
-        release {
-            storeFile file(findProperty('CHECKOFF_STORE_FILE') ?: 'checkoff-release.keystore')
-            storePassword findProperty('CHECKOFF_STORE_PASSWORD') ?: ''
-            keyAlias findProperty('CHECKOFF_KEY_ALIAS') ?: 'checkoff'
-            keyPassword findProperty('CHECKOFF_KEY_PASSWORD') ?: ''
-        }""",
-          )
-          # Use the release signing config for the release build type
-          s = s.replace(
-              "signingConfig signingConfigs.debug\n            def enableShrinkResources",
-              "signingConfig signingConfigs.release\n            def enableShrinkResources",
-          )
-          open(p, 'w').write(s)
-          print('signing patched')
-          PYEOF
+          {
+            echo "CHECKOFF_STORE_FILE=checkoff-release.keystore"
+            echo "CHECKOFF_STORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "CHECKOFF_KEY_ALIAS=${ANDROID_KEY_ALIAS}"
+            echo "CHECKOFF_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}"
+          } >> android/gradle.properties
+          # Patch build.gradle to use the release signing config.
+          python3 scripts/patch-release-signing.py
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
