@@ -28,7 +28,8 @@ const APK_NAME = 'checkoff.apk';
 
 const LAST_CHECK_KEY = 'updater:lastCheckAt';
 const SKIPPED_KEY = 'updater:skippedTag';
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+// Check on every app open / foreground — no throttle. The GitHub API call is
+// cheap and the user wants updates immediately.
 
 export interface ReleaseInfo {
   tag: string; // e.g. "v1.0.42"
@@ -90,10 +91,8 @@ export async function checkForUpdate(opts?: {
 }): Promise<ReleaseInfo | null> {
   if (Platform.OS !== 'android') return null;
   try {
-    if (!opts?.force) {
-      const last = await AsyncStorage.getItem(LAST_CHECK_KEY);
-      if (last && Date.now() - parseInt(last, 10) < CHECK_INTERVAL_MS) return null;
-    }
+    // No throttle: check on every call. Callers invoke this on launch and
+    // foreground return, plus a manual Settings button.
     await AsyncStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
     const release = await fetchLatestRelease();
     if (!release) return null;
