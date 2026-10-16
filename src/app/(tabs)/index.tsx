@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,7 +34,6 @@ import {
   Play,
   Plus,
   Rows3,
-  Send,
   Star,
   Target,
 } from 'lucide-react-native';
@@ -61,7 +59,6 @@ import { Skeleton } from '../../components/Skeleton';
 import { TaskActionSheet } from '../../components/TaskActionSheet';
 import { formatTimeDisplay } from '../../components/TaskRow';
 import { createInstance, type TaskInstanceEx } from '../../db/repos/instances';
-import { createTemplate } from '../../db/repos/templates';
 import {
   addDays,
   localDateString,
@@ -212,8 +209,6 @@ export default function TodayScreen() {
   const [filter, setFilter] = useState<TaskFilter>('all');
 
   // Quick add
-  const [quickTitle, setQuickTitle] = useState('');
-  const [quickBusy, setQuickBusy] = useState(false);
 
   // Daily reward state from the real rewards engine.
   const [rewardState, setRewardState] = useState<DailyRewardState | null>(null);
@@ -418,44 +413,6 @@ export default function TodayScreen() {
     }
   }, [db]);
 
-  const handleQuickAdd = useCallback(async () => {
-    const clean = quickTitle.trim();
-    if (!clean || quickBusy) return;
-    setQuickBusy(true);
-    try {
-      void haptics.check();
-      const catId = categories[0]?.id ?? null;
-      const prio: Priority =
-        filter === 'high' || filter === 'medium' || filter === 'low' ? filter : 'medium';
-      const tpl = await createTemplate(db, {
-        title: clean,
-        categoryId: catId,
-        durationMin: 30,
-        recurrence: 'once',
-        customDays: [],
-        targetDate: date,
-        alarmTime: null,
-        isRitual: false,
-        priority: prio,
-      });
-      await createInstance(db, {
-        templateId: tpl.id,
-        date,
-        title: clean,
-        categoryId: catId,
-        durationMin: 30,
-        alarmTime: null,
-        isRitual: false,
-        priority: prio,
-      });
-      setQuickTitle('');
-      await refresh(date);
-    } catch (e) {
-      console.error('[today] quick add failed', e);
-    } finally {
-      setQuickBusy(false);
-    }
-  }, [quickTitle, quickBusy, filter, categories, db, date, refresh]);
 
   const filteredTasks = useMemo(() => {
     return instances.filter((t) => {
@@ -676,7 +633,7 @@ export default function TodayScreen() {
                     styles.dayNum,
                     {
                       color: selected
-                        ? '#FFFFFF'
+                        ? theme.onAccent
                         : isToday
                         ? theme.text
                         : theme.textDim,
@@ -789,55 +746,6 @@ export default function TodayScreen() {
           claimable={rewardClaimable}
           onClaim={handleClaimReward}
         />
-
-        {/* 6 — Quick-add */}
-        <View
-          style={[
-            styles.quickAddWrap,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}
-        >
-          <PressableScale
-            onPress={() => setAddSheetOpen(true)}
-            hitSlop={HIT_SLOP}
-            innerStyle={[
-              styles.quickAddCircle,
-              { backgroundColor: theme.surface2, borderColor: theme.border },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="New task"
-          >
-            <Plus color={theme.text} size={18} strokeWidth={2.5} />
-          </PressableScale>
-          <TextInput
-            value={quickTitle}
-            onChangeText={setQuickTitle}
-            placeholder="Quick-add task for this day..."
-            placeholderTextColor={theme.textFaint}
-            returnKeyType="done"
-            onSubmitEditing={handleQuickAdd}
-            style={[styles.quickInput, { color: theme.text }]}
-          />
-          <PressableScale
-            onPress={handleQuickAdd}
-            disabled={!quickTitle.trim() || quickBusy}
-            hitSlop={HIT_SLOP}
-            innerStyle={[
-              styles.quickSend,
-              {
-                backgroundColor: quickTitle.trim() ? theme.accent : theme.surface2,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Quick add task"
-          >
-            <Send
-              color={quickTitle.trim() ? theme.onAccent : theme.textFaint}
-              size={17}
-              strokeWidth={2.4}
-            />
-          </PressableScale>
-        </View>
 
         {/* 7 — Schedule header + List/Timeline toggle */}
         <View style={styles.tasksHeader}>
@@ -1912,37 +1820,6 @@ const styles = StyleSheet.create({
   },
 
   /* 6 — Quick-add */
-  quickAddWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    paddingLeft: space(1),
-    paddingRight: space(1),
-    paddingVertical: space(0.75),
-    minHeight: TAP + 6,
-    gap: space(1),
-  },
-  quickAddCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickInput: {
-    flex: 1,
-    ...type.body,
-    paddingVertical: space(1),
-  },
-  quickSend: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   /* 7 — Schedule header */
   tasksHeader: {

@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Calendar, Clock } from 'lucide-react-native';
+import { Calendar, ChevronDown, Clock, Plus } from 'lucide-react-native';
 import type { Category, Recurrence, TaskPriority } from '../db/types';
 import {
   CATEGORY_TOKENS,
@@ -54,24 +54,44 @@ interface Props {
   initialValues?: Partial<TaskFormValues>;
   submitLabel: string;
   onSubmit: (v: TaskFormValues) => void;
+  /** Called when user wants to create a new custom category. */
+  onCreateCategory?: (name: string) => Promise<Category | null>;
 }
 
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const RECURRENCES: Array<{ key: Recurrence; label: string }> = [
+const RECURRENCES: { key: Recurrence; label: string }[] = [
   { key: 'daily', label: 'Daily' },
   { key: 'weekdays', label: 'Weekdays' },
   { key: 'custom', label: 'Custom' },
   { key: 'once', label: 'One-off' },
 ];
 
-const PRIORITY_OPTIONS: Array<{ key: TaskPriority; label: string }> = [
+const PRIORITY_OPTIONS: { key: TaskPriority; label: string }[] = [
   { key: 'low', label: 'Low' },
   { key: 'medium', label: 'Medium' },
   { key: 'high', label: 'High' },
 ];
 
+/** Preloaded categories seeded on first run. */
+export const DEFAULT_CATEGORIES: { name: string; colorToken: string }[] = [
+  { name: 'Work', colorToken: 'slate' },
+  { name: 'Health', colorToken: 'rose' },
+  { name: 'Learning', colorToken: 'violet' },
+  { name: 'Personal', colorToken: 'amber' },
+  { name: 'Fitness', colorToken: 'teal' },
+];
+
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
+/**
+ * Streamlined task creation — minimal friction UX:
+ *
+ * CORE (always visible): Title → Category chips → Priority → Create.
+ * Smart defaults: today, medium priority, one-off, 30min, alarm 9:00.
+ * One-tap create: type a title and hit the button.
+ *
+ * MORE OPTIONS (collapsed): recurrence, date, duration, alarm, ritual, notes.
+ */
 export function TaskForm({
   categories,
   showInstanceDate,
@@ -79,6 +99,7 @@ export function TaskForm({
   initialValues,
   submitLabel,
   onSubmit,
+  onCreateCategory,
 }: Props) {
   const theme: ThemePalette = useUiStore((s) => (s.theme === 'light' ? light : dark));
   const [title, setTitle] = useState(initialValues?.title ?? '');
@@ -94,13 +115,16 @@ export function TaskForm({
   const [priority, setPriority] = useState<TaskPriority>(initialValues?.priority ?? 'medium');
   const [notes, setNotes] = useState(initialValues?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
 
   const toggleDay = (d: number) =>
     setCustomDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
 
   const submit = () => {
     if (!title.trim()) {
-      setError('Enter a task title.');
+      setError('Give your task a title.');
       return;
     }
     if (recurrence === 'custom' && customDays.length === 0) {
@@ -124,54 +148,133 @@ export function TaskForm({
     });
   };
 
+  const handleAddCategory = async () => {
+    const name = newCatName.trim();
+    if (!name || !onCreateCategory) return;
+    // Cycle through color tokens for new categories
+    const token = CATEGORY_TOKENS[categories.length % CATEGORY_TOKENS.length];
+    const created = await onCreateCategory(name);
+    if (created) {
+      setCategoryId(created.id);
+      setNewCatName('');
+      setAddingCategory(false);
+    }
+  };
+
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+
   return (
     <View style={styles.form}>
-      {/* Title */}
-      <View style={styles.fieldGroup}>
-        <Text style={[styles.caption, { color: theme.textFaint }]}>TITLE</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder="What needs to be done?"
-          placeholderTextColor={theme.textFaint}
-          style={[
-            styles.input,
-            {
-              color: theme.text,
-              borderColor: theme.border,
-              backgroundColor: theme.surface2,
-            },
-          ]}
-        />
-      </View>
+      {/* ── CORE: Title ── */}
+      <TextInput
+        value={title}
+        onChangeText={setTitle}
+        placeholder="What do you want to accomplish?"
+        placeholderTextColor={theme.textFaint}
+        autoFocus
+        returnKeyType="done"
+        onSubmitEditing={submit}
+        style={[
+          styles.titleInput,
+          {
+            color: theme.text,
+            borderColor: theme.border,
+            backgroundColor: theme.surface,
+          },
+        ]}
+      />
 
-      {/* Category */}
+      {/* ── CORE: Category chips ── */}
       <View style={styles.fieldGroup}>
         <Text style={[styles.caption, { color: theme.textFaint }]}>CATEGORY</Text>
         <View style={styles.chips}>
-          <Chip
-            theme={theme}
-            label="None"
-            selected={categoryId === null}
-            onPress={() => setCategoryId(null)}
-          />
           {categories.map((c) => (
             <Chip
               key={c.id}
               theme={theme}
               label={c.name}
-              dot={categoryColor(c.colorToken, theme)}
+              dot={categoryColor(c.colorToken, theme.name)}
               selected={categoryId === c.id}
-              onPress={() => setCategoryId(c.id)}
+              onPress={() => setCategoryId(categoryId === c.id ? null : c.id)}
             />
           ))}
+          {onCreateCategory && !addingCategory && (
+            <PressableScale
+              onPress={() => setAddingCategory(true)}
+              hitSlop={4}
+              innerStyle={[
+                styles.chip,
+                styles.addChip,
+                { borderColor: theme.border, backgroundColor: 'transparent' },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Add custom category"
+            >
+              <Plus size={14} color={theme.textDim} strokeWidth={2.5} />
+              <Text style={[styles.chipText, { color: theme.textDim }]}>New</Text>
+            </PressableScale>
+          )}
         </View>
+        {addingCategory && (
+          <View style={styles.addCatRow}>
+            <TextInput
+              value={newCatName}
+              onChangeText={setNewCatName}
+              placeholder="Category name…"
+              placeholderTextColor={theme.textFaint}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleAddCategory}
+              style={[
+                styles.addCatInput,
+                {
+                  color: theme.text,
+                  borderColor: theme.border,
+                  backgroundColor: theme.surface2,
+                },
+              ]}
+            />
+            <PressableScale
+              onPress={handleAddCategory}
+              disabled={!newCatName.trim()}
+              innerStyle={[
+                styles.addCatBtn,
+                {
+                  backgroundColor: newCatName.trim() ? theme.accent : theme.surface2,
+                  opacity: newCatName.trim() ? 1 : 0.5,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Save category"
+            >
+              <Text
+                style={[
+                  styles.addCatBtnText,
+                  { color: newCatName.trim() ? theme.onAccent : theme.textDim },
+                ]}
+              >
+                Add
+              </Text>
+            </PressableScale>
+            <PressableScale
+              onPress={() => {
+                setAddingCategory(false);
+                setNewCatName('');
+              }}
+              innerStyle={styles.addCatCancel}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={[styles.small, { color: theme.textDim }]}>Cancel</Text>
+            </PressableScale>
+          </View>
+        )}
       </View>
 
-      {/* Priority */}
+      {/* ── CORE: Priority ── */}
       <View style={styles.fieldGroup}>
         <Text style={[styles.caption, { color: theme.textFaint }]}>PRIORITY</Text>
-        <View style={styles.EqualRow}>
+        <View style={styles.equalRow}>
           {PRIORITY_OPTIONS.map((p) => {
             const active = priority === p.key;
             return (
@@ -186,12 +289,16 @@ export function TaskForm({
                     borderColor: active ? theme.accent : theme.border,
                   },
                 ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${p.label} priority`}
               >
                 <Text
                   style={[
                     styles.equalChipText,
                     { color: active ? theme.onAccent : theme.textDim },
                   ]}
+                  numberOfLines={1}
                 >
                   {p.label}
                 </Text>
@@ -201,169 +308,195 @@ export function TaskForm({
         </View>
       </View>
 
-      {/* Recurrence */}
-      <View style={styles.fieldGroup}>
-        <Text style={[styles.caption, { color: theme.textFaint }]}>RECURRENCE</Text>
-        <View style={styles.chips}>
-          {RECURRENCES.map((r) => (
-            <Chip
-              key={r.key}
-              theme={theme}
-              label={r.label}
-              selected={recurrence === r.key}
-              onPress={() => setRecurrence(r.key)}
-            />
-          ))}
-        </View>
-
-        {recurrence === 'custom' && (
-          <View style={[styles.chips, { marginTop: space(1) }]}>
-            {DOW_LABELS.map((label, i) => (
-              <Chip
-                key={i}
-                theme={theme}
-                label={label}
-                selected={customDays.includes(i)}
-                onPress={() => toggleDay(i)}
-              />
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* Date Picker Strip */}
-      {(recurrence === 'once' || showInstanceDate) && (
-        <View style={styles.fieldGroup}>
-          <Text style={[styles.caption, { color: theme.textFaint }]}>DATE</Text>
-          <DateStepper
-            theme={theme}
-            date={date}
-            minDate={localDateString()}
-            onChange={setDate}
-          />
-        </View>
+      {/* ── CORE: Create button ── */}
+      {error && (
+        <Text style={[styles.small, { color: theme.text, textAlign: 'center' }]}>{error}</Text>
+      )}
+      <Button
+        label={submitLabel}
+        variant="primary"
+        size="lg"
+        fullWidth
+        onPress={submit}
+      />
+      {selectedCategory == null && (
+        <Text style={[styles.hint, { color: theme.textFaint }]}>
+          No category — you can pick one above or add your own.
+        </Text>
       )}
 
-      {/* Duration Slider */}
-      <Card padding={2}>
-        <Slider
-          label="Duration"
-          value={durationMin}
-          min={5}
-          max={240}
-          step={5}
-          suffix="m"
-          presets={[15, 30, 45, 60, 90, 120]}
-          onChange={setDurationMin}
+      {/* ── MORE OPTIONS (progressive disclosure) ── */}
+      <PressableScale
+        onPress={() => setShowMore((v) => !v)}
+        innerStyle={[
+          styles.moreToggle,
+          { borderColor: theme.border, backgroundColor: theme.surface },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={showMore ? 'Hide more options' : 'Show more options'}
+      >
+        <Text style={[styles.moreToggleText, { color: theme.textDim }]}>
+          {showMore ? 'Fewer options' : 'More options'}
+        </Text>
+        <ChevronDown
+          size={16}
+          color={theme.textDim}
+          strokeWidth={2}
+          style={{ transform: [{ rotate: showMore ? '180deg' : '0deg' }] }}
         />
-      </Card>
+      </PressableScale>
 
-      {/* Alarm Switch + Time Sliders */}
-      <Card padding={2}>
-        <View style={styles.toggleRow}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[styles.bodyMedium, { color: theme.text }]}>Scheduled Alarm</Text>
-            <Text style={[styles.small, { color: theme.textDim }]}>
-              Alert with sound and full-screen prompt at scheduled time
-            </Text>
+      {showMore && (
+        <View style={styles.moreBody}>
+          {/* Recurrence */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>REPEAT</Text>
+            <View style={styles.chips}>
+              {RECURRENCES.map((r) => (
+                <Chip
+                  key={r.key}
+                  theme={theme}
+                  label={r.label}
+                  selected={recurrence === r.key}
+                  onPress={() => setRecurrence(r.key)}
+                />
+              ))}
+            </View>
+            {recurrence === 'custom' && (
+              <View style={[styles.chips, { marginTop: space(1) }]}>
+                {DOW_LABELS.map((label, i) => (
+                  <Chip
+                    key={i}
+                    theme={theme}
+                    label={label}
+                    selected={customDays.includes(i)}
+                    onPress={() => toggleDay(i)}
+                  />
+                ))}
+              </View>
+            )}
           </View>
-          <Switch
-            value={alarmEnabled}
-            onValueChange={setAlarmEnabled}
-            accessibilityLabel="Toggle alarm"
-          />
-        </View>
 
-        {alarmEnabled && (
-          <View style={styles.alarmBody}>
-            <View style={styles.timePickerHeader}>
-              <Text style={[styles.caption, { color: theme.textFaint }]}>ALARM TIME</Text>
-              <NativeTimeButton
+          {/* Date */}
+          {(recurrence === 'once' || showInstanceDate) && (
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.caption, { color: theme.textFaint }]}>DATE</Text>
+              <DateStepper
                 theme={theme}
-                hour={hour}
-                minute={minute}
-                onChange={(h, m) => {
-                  setHour(h);
-                  setMinute(m);
-                }}
+                date={date}
+                minDate={localDateString()}
+                onChange={setDate}
               />
             </View>
+          )}
+
+          {/* Duration */}
+          <Card padding={2}>
             <Slider
-              label="Hour (24h)"
-              value={hour}
-              min={0}
-              max={23}
-              step={1}
-              formatValue={(v) => `${pad2(v)}:00`}
-              presets={[6, 9, 12, 15, 18, 21]}
-              onChange={setHour}
-            />
-            <Slider
-              label="Minute"
-              value={minute}
-              min={0}
-              max={55}
+              label="Duration"
+              value={durationMin}
+              min={5}
+              max={240}
               step={5}
-              formatValue={(v) => `:${pad2(v)}`}
-              presets={[0, 15, 30, 45]}
-              onChange={setMinute}
+              suffix="m"
+              presets={[15, 30, 45, 60, 90, 120]}
+              onChange={setDurationMin}
+            />
+          </Card>
+
+          {/* Alarm */}
+          <Card padding={2}>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1, flexShrink: 1, gap: 2 }}>
+                <Text
+                  style={[styles.bodyMedium, { color: theme.text }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Scheduled Alarm
+                </Text>
+                <Text
+                  style={[styles.small, { color: theme.textDim }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  Alert with sound at scheduled time
+                </Text>
+              </View>
+              <Switch
+                value={alarmEnabled}
+                onValueChange={setAlarmEnabled}
+                accessibilityLabel="Toggle alarm"
+              />
+            </View>
+            {alarmEnabled && (
+              <View style={styles.alarmBody}>
+                <View style={styles.timePickerHeader}>
+                  <Text style={[styles.caption, { color: theme.textFaint }]}>ALARM TIME</Text>
+                  <NativeTimeButton
+                    theme={theme}
+                    hour={hour}
+                    minute={minute}
+                    onChange={(h, m) => {
+                      setHour(h);
+                      setMinute(m);
+                    }}
+                  />
+                </View>
+              </View>
+            )}
+          </Card>
+
+          {/* Ritual */}
+          <Card padding={2}>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1, flexShrink: 1, gap: 2 }}>
+                <Text
+                  style={[styles.bodyMedium, { color: theme.text }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Morning Ritual
+                </Text>
+                <Text
+                  style={[styles.small, { color: theme.textDim }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  Pinned to the top of your day
+                </Text>
+              </View>
+              <Switch
+                value={isRitual}
+                onValueChange={setIsRitual}
+                accessibilityLabel="Toggle ritual"
+              />
+            </View>
+          </Card>
+
+          {/* Notes */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>NOTES</Text>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Optional context…"
+              placeholderTextColor={theme.textFaint}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              style={[
+                styles.notesInput,
+                {
+                  color: theme.text,
+                  borderColor: theme.border,
+                  backgroundColor: theme.surface2,
+                },
+              ]}
             />
           </View>
-        )}
-      </Card>
-
-      {/* Ritual Switch */}
-      <Card padding={2}>
-        <View style={styles.toggleRow}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[styles.bodyMedium, { color: theme.text }]}>Morning Ritual</Text>
-            <Text style={[styles.small, { color: theme.textDim }]}>
-              Anchor task pinned to the top of your day
-            </Text>
-          </View>
-          <Switch
-            value={isRitual}
-            onValueChange={setIsRitual}
-            accessibilityLabel="Toggle ritual"
-          />
         </View>
-      </Card>
-
-      {/* Notes */}
-      <View style={styles.fieldGroup}>
-        <Text style={[styles.caption, { color: theme.textFaint }]}>NOTES</Text>
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Optional context, checklist, or constraints…"
-          placeholderTextColor={theme.textFaint}
-          multiline
-          numberOfLines={3}
-          textAlignVertical="top"
-          style={[
-            styles.notesInput,
-            {
-              color: theme.text,
-              borderColor: theme.border,
-              backgroundColor: theme.surface2,
-            },
-          ]}
-        />
-      </View>
-
-      {error && (
-        <Text style={[styles.small, { color: theme.text }]}>{error}</Text>
       )}
-
-      <View style={{ marginTop: space(1) }}>
-        <Button
-          label={submitLabel}
-          variant="primary"
-          size="lg"
-          fullWidth
-          onPress={submit}
-        />
-      </View>
     </View>
   );
 }
@@ -392,6 +525,9 @@ export function Chip({
           backgroundColor: selected ? theme.accent : theme.surface2,
         },
       ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
     >
       {dot && (
         <View
@@ -407,6 +543,7 @@ export function Chip({
           { color: selected ? theme.onAccent : theme.textDim },
         ]}
         numberOfLines={1}
+        ellipsizeMode="tail"
       >
         {label}
       </Text>
@@ -414,9 +551,7 @@ export function Chip({
   );
 }
 
-/**
- * Replaces the legacy +/- stepper with our tactile detent Slider.
- */
+/** Simplified duration/alarm pickers kept for API compat. */
 export function NumStepper({
   label,
   value,
@@ -478,6 +613,8 @@ export function NativeTimeButton({
           styles.timeButton,
           { borderColor: theme.borderStrong, backgroundColor: theme.surface2 },
         ]}
+        accessibilityRole="button"
+        accessibilityLabel={`Alarm time ${pad2(hour)}:${pad2(minute)}`}
       >
         <Clock color={theme.textDim} size={15} strokeWidth={2} />
         <Text style={[styles.timeButtonText, { color: theme.text }]}>
@@ -561,12 +698,15 @@ export function DateStepper({
                   borderColor: active ? theme.accent : theme.border,
                 },
               ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
               <Text
                 style={[
                   styles.datePillText,
                   { color: active ? theme.onAccent : theme.textDim },
                 ]}
+                numberOfLines={1}
               >
                 {formatDayChip(d)}
               </Text>
@@ -580,9 +720,13 @@ export function DateStepper({
             styles.datePill,
             { backgroundColor: theme.surface2, borderColor: theme.borderStrong },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Pick a date"
         >
           <Calendar color={theme.text} size={14} strokeWidth={2} />
-          <Text style={[styles.datePillText, { color: theme.text }]}>Pick date</Text>
+          <Text style={[styles.datePillText, { color: theme.text }]} numberOfLines={1}>
+            Pick date
+          </Text>
         </PressableScale>
       </ScrollView>
       {showPicker && (
@@ -617,11 +761,13 @@ export function ColorTokenPicker({
             innerStyle={[
               styles.swatch,
               {
-                backgroundColor: categoryColor(t, theme),
+                backgroundColor: categoryColor(t, theme.name),
                 borderColor: active ? theme.accent : theme.border,
                 borderWidth: active ? 2.5 : 1,
               },
             ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
           />
         );
       })}
@@ -635,20 +781,19 @@ const styles = StyleSheet.create({
   caption: { ...type.caption, textTransform: 'uppercase' },
   bodyMedium: { ...type.bodyMedium },
   small: { ...type.small },
-  input: {
-    ...type.body,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: space(2),
-    minHeight: TAP,
+  hint: {
+    ...type.caption,
+    textAlign: 'center',
+    marginTop: -space(1),
   },
-  notesInput: {
-    ...type.body,
+  titleInput: {
+    ...type.h2,
+    fontWeight: '700',
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     paddingHorizontal: space(2),
-    paddingVertical: space(1.5),
-    minHeight: 84,
+    paddingVertical: space(2),
+    minHeight: 64,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space(1) },
   chip: {
@@ -660,13 +805,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: space(2),
     minHeight: TAP,
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  addChip: {
+    borderStyle: 'dashed',
   },
   chipDot: { width: 7, height: 7, borderRadius: 3.5 },
   chipText: {
     ...type.small,
     fontWeight: '600',
   },
-  EqualRow: {
+  addCatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space(1),
+    marginTop: space(1),
+  },
+  addCatInput: {
+    ...type.body,
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: space(2),
+    minHeight: TAP,
+  },
+  addCatBtn: {
+    borderRadius: radius.md,
+    paddingHorizontal: space(2),
+    minHeight: TAP,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addCatBtnText: {
+    ...type.small,
+    fontWeight: '700',
+  },
+  addCatCancel: {
+    paddingHorizontal: space(1),
+    minHeight: TAP,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  equalRow: {
     flexDirection: 'row',
     gap: space(1),
   },
@@ -685,6 +865,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+  },
+  moreToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space(1),
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: space(1.5),
+  },
+  moreToggleText: {
+    ...type.small,
+    fontWeight: '600',
+  },
+  moreBody: {
+    gap: space(2),
+  },
+  notesInput: {
+    ...type.body,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: space(2),
+    paddingVertical: space(1.5),
+    minHeight: 84,
   },
   swatch: {
     width: TAP,
@@ -736,6 +940,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space(2),
     minHeight: TAP,
     justifyContent: 'center',
+    flexShrink: 0,
   },
   datePillText: {
     ...type.small,

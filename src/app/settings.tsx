@@ -103,7 +103,7 @@ function SectionHeader({
       >
         {icon}
       </View>
-      <Text style={[styles.sectionHeadLabel, { color: palette.textMuted }]}>
+      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.sectionHeadLabel, { color: palette.textMuted }]}>
         {label}
       </Text>
     </View>
@@ -430,7 +430,7 @@ export default function SettingsScreen() {
 
           {/* Theme Mode: Dark / Light / System */}
           <View style={styles.blockRow}>
-            <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
               Theme
             </Text>
             <View
@@ -481,10 +481,10 @@ export default function SettingsScreen() {
           {/* Clock Format: 12h / 24h */}
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Clock Format
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Live hero clock and task timestamps
               </Text>
             </View>
@@ -528,10 +528,10 @@ export default function SettingsScreen() {
           {/* Week Start: Monday / Sunday */}
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Week Starts On
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Calendar grids and weekly telemetry
               </Text>
             </View>
@@ -584,7 +584,7 @@ export default function SettingsScreen() {
             label="ALARMS & WINDOWS"
           />
 
-          <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+          <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
             Alarm Sound Profile
           </Text>
           <Text
@@ -715,10 +715,10 @@ export default function SettingsScreen() {
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Streak At Risk
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 2h before day end when your streak is 3+ days and today&apos;s
                 goal is unmet
               </Text>
@@ -735,10 +735,10 @@ export default function SettingsScreen() {
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Daily Reward Nudge
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Remind me to claim an earned daily reward
               </Text>
             </View>
@@ -751,7 +751,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.rewardTimeRow}>
-            <Text style={[styles.rowLabel, { color: palette.textSecondary }]}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textSecondary }]}>
               Nudge time
             </Text>
             <View
@@ -771,10 +771,10 @@ export default function SettingsScreen() {
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Reward Affordable
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Alert once when your balance first reaches a reward&apos;s cost
               </Text>
             </View>
@@ -790,10 +790,10 @@ export default function SettingsScreen() {
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Level Up
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Celebrate when you reach a new level
               </Text>
             </View>
@@ -809,10 +809,10 @@ export default function SettingsScreen() {
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Weekly Review
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Sunday 19:00 recap of streaks, focus, and badges
               </Text>
             </View>
@@ -828,10 +828,10 @@ export default function SettingsScreen() {
 
           <View style={styles.rewardTimeRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Quiet Hours
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 No reward notifications between these times
               </Text>
             </View>
@@ -865,10 +865,10 @@ export default function SettingsScreen() {
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Haptic Feedback
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 Physical detents on sliders, switches, and task swipes
               </Text>
             </View>
@@ -883,7 +883,7 @@ export default function SettingsScreen() {
           <View style={[styles.divider, { backgroundColor: palette.border }]} />
 
           <View style={styles.blockRow}>
-            <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
               Impulse Intensity
             </Text>
             <View
@@ -960,7 +960,7 @@ export default function SettingsScreen() {
           />
 
           <View style={styles.inlineRow}>
-            <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
               Installed Build
             </Text>
             <Text style={[styles.monoVal, { color: palette.textSecondary }]}>
@@ -979,10 +979,10 @@ export default function SettingsScreen() {
             style={styles.inlineRow}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.rowLabel, { color: palette.textPrimary }]}>
                 Over-the-Air Release Status
               </Text>
-              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.rowHint, { color: palette.textMuted }]}>
                 {checking
                   ? 'Checking release channel...'
                   : phase.kind === 'available'
@@ -1077,10 +1077,12 @@ const styles = StyleSheet.create({
   rowLabel: {
     ...type.body,
     fontWeight: '600',
+    flexShrink: 1,
   },
   rowHint: {
     ...type.caption,
     marginTop: 2,
+    flexShrink: 1,
   },
   monoVal: {
     ...type.monoSm,

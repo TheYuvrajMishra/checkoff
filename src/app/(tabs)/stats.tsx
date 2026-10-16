@@ -1324,7 +1324,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space(2),
     paddingTop: space.md,
-    gap: space.md,
+    gap: space.sm,
   },
   emptyWrap: {
     flex: 1,

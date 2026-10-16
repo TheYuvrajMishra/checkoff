@@ -463,7 +463,7 @@ export default function CalendarScreen() {
               const isSelected = dStr === selectedDate;
               const isToday = dStr === today;
               const fill = getHeatFill(stat.done, stat.total, isSelected);
-              const textColor = isSelected ? '#FFFFFF' : palette.textPrimary;
+              const textColor = isSelected ? palette.onAccent : palette.textPrimary;
 
               return (
                 <PressableScale
@@ -491,7 +491,7 @@ export default function CalendarScreen() {
                       styles.weekDowText,
                       {
                         color: isSelected
-                          ? '#FFFFFF'
+                          ? palette.onAccent
                           : palette.textMuted,
                       },
                     ]}
@@ -512,7 +512,7 @@ export default function CalendarScreen() {
                           styles.countMicro,
                           {
                             color: isSelected
-                              ? '#FFFFFF'
+                              ? palette.onAccent
                               : palette.textSecondary,
                           },
                         ]}
@@ -526,7 +526,7 @@ export default function CalendarScreen() {
                           styles.emptyDot,
                           {
                             backgroundColor: isSelected
-                              ? '#FFFFFF'
+                              ? palette.onAccent
                               : palette.border,
                           },
                         ]}
@@ -612,7 +612,7 @@ export default function CalendarScreen() {
                       const isSelected = c.date === selectedDate;
                       const isToday = c.date === today;
                       const fill = getHeatFill(stat.done, stat.total, isSelected);
-                      const textColor = isSelected ? '#FFFFFF' : palette.textPrimary;
+                      const textColor = isSelected ? palette.onAccent : palette.textPrimary;
 
                       return (
                         <PressableScale
@@ -649,7 +649,7 @@ export default function CalendarScreen() {
                                 styles.monthCellCount,
                                 {
                                   color: isSelected
-                                    ? '#FFFFFF'
+                                    ? palette.onAccent
                                     : palette.textSecondary,
                                 },
                               ]}
@@ -846,7 +846,7 @@ export default function CalendarScreen() {
                           haptics.medium();
                           setMovingTask(t);
                         }}
-                        style={[
+                        innerStyle={[
                           styles.dayTaskCard,
                           {
                             backgroundColor: palette.bgSurface,
@@ -1428,6 +1428,7 @@ const styles = StyleSheet.create({
   checkCircle: {
     width: 24,
     height: 24,
+    flexShrink: 0,
     borderRadius: 12,
     borderWidth: 1.5,
     alignItems: 'center',
@@ -1459,6 +1460,7 @@ const styles = StyleSheet.create({
   taskActionMini: {
     width: 36,
     height: 36,
+    flexShrink: 0,
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',

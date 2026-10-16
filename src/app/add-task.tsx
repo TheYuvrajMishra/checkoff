@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -11,11 +11,11 @@ import { X } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../state/tasks';
 import { useUiStore } from '../state/ui';
 import { dark, light, type, space, TAP, radius, type ThemePalette } from '../theme/tokens';
-import { listCategories } from '../db/repos/categories';
+import { createCategory, listCategories } from '../db/repos/categories';
 import { createTemplate } from '../db/repos/templates';
 import { createInstance } from '../db/repos/instances';
 import { setMeta } from '../db/repos/meta';
-import { TaskForm, type TaskFormValues } from '../components/TaskForm';
+import { DEFAULT_CATEGORIES, TaskForm, type TaskFormValues } from '../components/TaskForm';
 import type { Category } from '../db/types';
 import { MetallicText } from '../components/MetallicText';
 import { PressableScale } from '../components/PressableScale';
@@ -35,7 +35,22 @@ export default function AddTask() {
     let cancelled = false;
     (async () => {
       try {
-        const cats = await listCategories(db);
+        let cats = await listCategories(db);
+        // Seed preloaded categories on first run so users get one-tap
+        // categorization without any setup friction.
+        if (cats.length === 0) {
+          for (const dc of DEFAULT_CATEGORIES) {
+            try {
+              await createCategory(db, {
+                name: dc.name,
+                colorToken: dc.colorToken,
+              });
+            } catch {
+              // ignore individual seed failures
+            }
+          }
+          cats = await listCategories(db);
+        }
         if (!cancelled) setCategories(cats);
       } catch (e) {
         console.error('[add-task] load categories failed', e);
@@ -45,6 +60,28 @@ export default function AddTask() {
       cancelled = true;
     };
   }, [db]);
+
+  const handleCreateCategory = useCallback(
+    async (name: string): Promise<Category | null> => {
+      try {
+        // Cycle color tokens so custom categories get distinct dots
+        const existing = await listCategories(db);
+        const token =
+          DEFAULT_CATEGORIES.length > 0
+            ? ['slate', 'amber', 'teal', 'violet', 'rose', 'sage'][
+                existing.length % 6
+              ]
+            : 'slate';
+        const created = await createCategory(db, { name, colorToken: token });
+        setCategories(await listCategories(db));
+        return created;
+      } catch (e) {
+        console.error('[add-task] create category failed', e);
+        return null;
+      }
+    },
+    [db]
+  );
 
   const submit = async (v: TaskFormValues) => {
     if (busy) return;
@@ -115,6 +152,7 @@ export default function AddTask() {
           showInstanceDate
           submitLabel={busy ? 'Creating…' : 'Create Task'}
           onSubmit={submit}
+          onCreateCategory={handleCreateCategory}
         />
         {error && <Text style={[styles.small, { color: theme.text }]}>{error}</Text>}
       </ScrollView>
