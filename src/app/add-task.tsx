@@ -7,22 +7,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { X } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../state/tasks';
 import { useUiStore } from '../state/ui';
 import { dark, light, type, space, TAP, radius, type ThemePalette } from '../theme/tokens';
 import { listCategories } from '../db/repos/categories';
 import { createTemplate } from '../db/repos/templates';
 import { createInstance } from '../db/repos/instances';
+import { setMeta } from '../db/repos/meta';
 import { TaskForm, type TaskFormValues } from '../components/TaskForm';
 import type { Category } from '../db/types';
+import { MetallicText } from '../components/MetallicText';
 import { PressableScale } from '../components/PressableScale';
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
-/**
- * Modal quick-add: one screen that creates both the repeating template
- * and the concrete instance for the chosen day.
- */
 export default function AddTask() {
   const db = useTasksDb();
   const theme: ThemePalette = useUiStore((s) => (s.theme === 'light' ? light : dark));
@@ -56,12 +55,12 @@ export default function AddTask() {
         durationMin: v.durationMin,
         recurrence: v.recurrence,
         customDays: v.customDays,
-        // A one-off fires on the day the user picked.
         targetDate: v.recurrence === 'once' ? v.date : null,
         alarmTime: v.alarmEnabled ? `${pad2(v.hour)}:${pad2(v.minute)}` : null,
         isRitual: v.isRitual,
+        priority: v.priority,
       });
-      await createInstance(db, {
+      const instance = await createInstance(db, {
         templateId: template.id,
         date: v.date,
         title: v.title,
@@ -69,7 +68,11 @@ export default function AddTask() {
         durationMin: v.durationMin,
         alarmTime: v.alarmEnabled ? `${pad2(v.hour)}:${pad2(v.minute)}` : null,
         isRitual: v.isRitual,
+        priority: v.priority,
       });
+      if (v.notes) {
+        await setMeta(db, `note:${instance.id}`, v.notes);
+      }
       setError(null);
       await refresh(v.date);
       router.back();
@@ -82,25 +85,34 @@ export default function AddTask() {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
-          <Text style={[styles.h1, { color: theme.text }]}>New task</Text>
+          <MetallicText style={styles.h1}>New Task</MetallicText>
           <PressableScale
             onPress={() => router.back()}
-            style={[styles.closeBtn, { borderColor: theme.border }]}
-            hitSlop={8}
+            style={styles.closeBtn}
+            innerStyle={[
+              styles.closeInner,
+              { borderColor: theme.border, backgroundColor: theme.surface },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
           >
-            <Text style={[styles.small, { color: theme.textDim }]}>Cancel</Text>
+            <X color={theme.textDim} size={18} strokeWidth={2} />
           </PressableScale>
         </View>
 
         <TaskForm
           categories={categories}
           showInstanceDate
-          submitLabel="Add task"
+          submitLabel={busy ? 'Creating…' : 'Create Task'}
           onSubmit={submit}
         />
-        {error && <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>}
+        {error && <Text style={[styles.small, { color: theme.text }]}>{error}</Text>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -117,10 +129,17 @@ const styles = StyleSheet.create({
   h1: { ...type.h1 },
   small: { ...type.small },
   closeBtn: {
+    width: TAP,
+    height: TAP,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeInner: {
+    width: 38,
+    height: 38,
     borderWidth: 1,
     borderRadius: radius.md,
-    paddingHorizontal: space(2),
-    minHeight: TAP,
+    alignItems: 'center',
     justifyContent: 'center',
   },
 });

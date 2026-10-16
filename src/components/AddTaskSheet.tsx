@@ -1,33 +1,23 @@
 /**
- * CheckOff — reusable add-task bottom sheet.
+ * CheckOff — reusable add/edit-task bottom sheet.
  *
- * Wraps the existing TaskForm in a bottom sheet (transparent Modal, slide-up).
- * On submit it creates both the repeating template and the concrete instance
- * for the chosen day (same logic as the add-task screen), then refreshes the
- * tasks store and notifies the parent via onAdded.
+ * Uses the velocity-aware Sheet component (drag-to-dismiss, backdrop fade,
+ * keyboard-aware). Persists optional notes in the meta table so the DB
+ * schema stays untouched.
  */
-import { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Modal,
-  PanResponder,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { X } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { useTasksDb, useTasksStore } from '../state/tasks';
 import { useUiStore } from '../state/ui';
-import { dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
+import { dark, light, space, type, type ThemePalette } from '../theme/tokens';
 import { listCategories } from '../db/repos/categories';
 import { createTemplate } from '../db/repos/templates';
 import { createInstance, type InstancePatch, type TaskInstanceEx } from '../db/repos/instances';
+import { getMeta, setMeta } from '../db/repos/meta';
 import { localDateString } from '../db/time';
 import { TaskForm, type TaskFormValues } from './TaskForm';
 import type { Category } from '../db/types';
-import { PressableScale } from './PressableScale';
+import { Sheet } from './Sheet';
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
@@ -45,23 +35,54 @@ interface Props {
 }
 
 function alarmToHourMin(alarmTime: string | null): { hour: number; minute: number } {
-  if (!alarmTime) return { hour: 7, minute: 0 };
+  if (!alarmTime) return { hour: 9, minute: 0 };
   const m = /^(\d{2}):(\d{2})$/.exec(alarmTime);
-  if (!m) return { hour: 7, minute: 0 };
+  if (!m) return { hour: 9, minute: 0 };
   return { hour: Number(m[1]), minute: Number(m[2]) };
 }
 
-export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, onEdited }: Props) {
+export function AddTaskSheet({
+  visible,
+  onClose,
+  initialDate,
+  editing,
+  onAdded,
+  onEdited,
+}: Props) {
   const db = useTasksDb();
   const theme: ThemePalette = useUiStore((s) => (s.theme === 'light' ? light : dark));
   const refresh = useTasksStore((s) => s.refresh);
   const updateTask = useTasksStore((s) => s.updateTask);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [existingNotes, setExistingNotes] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
   const isEditing = !!editing;
+
+  useEffect(() => {
+    if (!visible) return;
+    setError(null);
+    setBusy(false);
+    let cancelled = false;
+    (async () => {
+      try {
+        const cats = await listCategories(db);
+        const noteVal = editing ? await getMeta(db, `note:${editing.id}`) : null;
+        if (!cancelled) {
+          setCategories(cats);
+          setExistingNotes(noteVal ?? '');
+          setFormKey((k) => k + 1);
+        }
+      } catch (e) {
+        console.error('[add-task-sheet] load failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, db, editing]);
 
   const initialValues: Partial<TaskFormValues> | undefined = editing
     ? (() => {
@@ -78,64 +99,10 @@ export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, 
           durationMin: editing.durationMin,
           isRitual: editing.isRitual,
           priority: editing.priority ?? 'medium',
+          notes: existingNotes,
         };
       })()
     : undefined;
-
-  // Entrance slide + drag-down-to-dismiss offset (native driver).
-  const enterY = useRef(new Animated.Value(560)).current;
-  const dragY = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!visible) return;
-    setError(null);
-    setBusy(false);
-    setFormKey((k) => k + 1);
-    enterY.setValue(560);
-    dragY.setValue(0);
-    Animated.timing(enterY, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-    let cancelled = false;
-    (async () => {
-      try {
-        const cats = await listCategories(db);
-        if (!cancelled) setCategories(cats);
-      } catch (e) {
-        console.error('[add-task-sheet] load categories failed', e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, db, enterY, dragY]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) =>
-        g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderMove: (_, g) => {
-        if (g.dy > 0) dragY.setValue(g.dy);
-      },
-      onPanResponderRelease: (_, g) => {
-        if (g.dy > 120 || g.vy > 0.9) {
-          Animated.timing(dragY, {
-            toValue: 560,
-            duration: 180,
-            useNativeDriver: true,
-          }).start(() => {
-            dragY.setValue(0);
-            onClose();
-          });
-        } else {
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
-        }
-      },
-    })
-  ).current;
 
   const submit = async (v: TaskFormValues) => {
     if (busy) return;
@@ -150,24 +117,27 @@ export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, 
           priority: v.priority,
         };
         await updateTask(editing.id, patch);
+        if (v.notes !== undefined) {
+          await setMeta(db, `note:${editing.id}`, v.notes);
+        }
         setError(null);
         onEdited?.();
         onClose();
         return;
       }
+
       const template = await createTemplate(db, {
         title: v.title,
         categoryId: v.categoryId,
         durationMin: v.durationMin,
         recurrence: v.recurrence,
         customDays: v.customDays,
-        // A one-off fires on the day the user picked.
         targetDate: v.recurrence === 'once' ? v.date : null,
         alarmTime: v.alarmEnabled ? `${pad2(v.hour)}:${pad2(v.minute)}` : null,
         isRitual: v.isRitual,
         priority: v.priority,
       });
-      await createInstance(db, {
+      const instance = await createInstance(db, {
         templateId: template.id,
         date: v.date,
         title: v.title,
@@ -177,123 +147,57 @@ export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, 
         isRitual: v.isRitual,
         priority: v.priority,
       });
+      if (v.notes) {
+        await setMeta(db, `note:${instance.id}`, v.notes);
+      }
       setError(null);
       await refresh(v.date);
       onAdded?.(v.date);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add task.');
+      setError(e instanceof Error ? e.message : 'Could not save task.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal
+    <Sheet
       visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={onClose}
+      onClose={onClose}
+      title={isEditing ? 'Edit Task' : 'New Task'}
+      maxHeightPct={0.9}
     >
-      <View style={styles.backdrop}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close add task sheet"
+      <View style={styles.body}>
+        <TaskForm
+          key={formKey}
+          categories={categories}
+          showInstanceDate={!isEditing}
+          initialDate={initialDate ?? localDateString()}
+          initialValues={initialValues}
+          submitLabel={
+            isEditing
+              ? busy
+                ? 'Saving…'
+                : 'Save Changes'
+              : busy
+              ? 'Creating…'
+              : 'Create Task'
+          }
+          onSubmit={submit}
         />
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.bg,
-              borderColor: theme.border,
-              transform: [{ translateY: Animated.add(enterY, dragY) }],
-            },
-          ]}
-        >
-          <View style={styles.handleZone} {...panResponder.panHandlers}>
-            <View style={[styles.handle, { backgroundColor: theme.border }]} />
-            <View style={styles.header}>
-              <Text style={[styles.h2, { color: theme.text }]}>
-                {isEditing ? 'Edit task' : 'New task'}
-              </Text>
-              <PressableScale
-                onPress={onClose}
-                style={[styles.closeBtn, { borderColor: theme.border }]}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <X color={theme.textDim} size={20} strokeWidth={2} />
-              </PressableScale>
-            </View>
-          </View>
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <TaskForm
-              key={formKey}
-              categories={categories}
-              showInstanceDate={!isEditing}
-              initialDate={initialDate ?? localDateString()}
-              initialValues={initialValues}
-              submitLabel={isEditing ? (busy ? 'Saving…' : 'Save changes') : busy ? 'Adding…' : 'Add task'}
-              onSubmit={submit}
-            />
-            {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
-          </ScrollView>
-        </Animated.View>
+        {error && <Text style={[styles.error, { color: theme.text }]}>{error}</Text>}
       </View>
-    </Modal>
+    </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'flex-end',
+  body: {
+    paddingTop: space(1),
   },
-  sheet: {
-    maxHeight: '88%',
-    borderTopWidth: 1,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    overflow: 'hidden',
+  error: {
+    ...type.small,
+    marginTop: space(1),
   },
-  handleZone: {
-    paddingTop: space(1.5),
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: space(1),
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space(2),
-    paddingBottom: space(1),
-  },
-  h2: { ...type.h2 },
-  closeBtn: {
-    width: TAP,
-    height: TAP,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scroll: {
-    paddingHorizontal: space(2),
-    paddingBottom: space(4),
-  },
-  error: { ...type.small, marginTop: space(1) },
 });
