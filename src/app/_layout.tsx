@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { Appearance, AppState } from 'react-native';
 import { Stack, router, useSegments } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -8,7 +8,15 @@ import * as Linking from 'expo-linking';
 import { migrateDb } from '../db/migrations';
 import { useDb } from '../db/useDb';
 import { getMeta, META_KEYS } from '../db/repos/meta';
-import { useUiStore, type HapticIntensity } from '../state/ui';
+import {
+  resolveThemeName,
+  useUiStore,
+  type AlarmSoundId,
+  type ClockFormat,
+  type HapticIntensity,
+  type ThemeMode,
+  type WeekStart,
+} from '../state/ui';
 import { dark, light } from '../theme/tokens';
 import { localDateString } from '../db/time';
 import { setDb } from '../state/tasks';
@@ -78,18 +86,34 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
     setNotificationsDb(db);
 
     (async () => {
-      const [onboarded, theme, hapticsEnabled, hapticIntensity, graceMin, snoozeMin] =
-        await Promise.all([
-          getMeta(db, META_KEYS.onboarded),
-          getMeta(db, META_KEYS.theme),
-          getMeta(db, META_KEYS.hapticsEnabled),
-          getMeta(db, META_KEYS.hapticIntensity),
-          getMeta(db, META_KEYS.graceMin),
-          getMeta(db, META_KEYS.snoozeMin),
-        ]);
+      const [
+        onboarded,
+        themeRaw,
+        hapticsEnabled,
+        hapticIntensity,
+        graceMin,
+        snoozeMin,
+        clockFormat,
+        weekStart,
+        alarmSound,
+      ] = await Promise.all([
+        getMeta(db, META_KEYS.onboarded),
+        getMeta(db, META_KEYS.theme),
+        getMeta(db, META_KEYS.hapticsEnabled),
+        getMeta(db, META_KEYS.hapticIntensity),
+        getMeta(db, META_KEYS.graceMin),
+        getMeta(db, META_KEYS.snoozeMin),
+        getMeta(db, 'clock_format'),
+        getMeta(db, 'week_start'),
+        getMeta(db, 'alarm_sound'),
+      ]);
+
+      const themeMode: ThemeMode =
+        themeRaw === 'light' || themeRaw === 'system' ? themeRaw : 'dark';
 
       const ui = {
-        theme: (theme === 'light' ? 'light' : 'dark') as 'dark' | 'light',
+        themeMode,
+        theme: resolveThemeName(themeMode),
         hapticsEnabled: hapticsEnabled !== '0',
         hapticIntensity: (
           ['light', 'medium', 'strong'] as HapticIntensity[]
@@ -100,6 +124,13 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
           Number.isFinite(Number(graceMin)) && Number(graceMin) > 0 ? Number(graceMin) : 15,
         snoozeMin:
           Number.isFinite(Number(snoozeMin)) && Number(snoozeMin) > 0 ? Number(snoozeMin) : 9,
+        clockFormat: (clockFormat === '12h' ? '12h' : '24h') as ClockFormat,
+        weekStart: (weekStart === 'sun' ? 'sun' : 'mon') as WeekStart,
+        alarmSound: (
+          ['pulse', 'beacon', 'chime', 'industrial'] as AlarmSoundId[]
+        ).includes(alarmSound as AlarmSoundId)
+          ? (alarmSound as AlarmSoundId)
+          : ('pulse' as AlarmSoundId),
         hydrated: true,
       };
       useUiStore.getState().set(ui);
@@ -118,10 +149,15 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
       }
     })();
 
-    // Foreground: re-run startup tasks (midnight rollover, timezone change,
-    // alarm ledger reconciliation after reboot) + throttled update check.
-    // Also retry a pending APK install (user may have just granted
-    // "Install unknown apps" and returned).
+    const appearanceSub = Appearance.addChangeListener(({ colorScheme }) => {
+      const currentMode = useUiStore.getState().themeMode;
+      if (currentMode === 'system') {
+        useUiStore.getState().set({
+          theme: colorScheme === 'light' ? 'light' : 'dark',
+        });
+      }
+    });
+
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void runStartupTasks(db);
@@ -150,7 +186,8 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {});
 
-  return () => {
+    return () => {
+      appearanceSub.remove();
       appStateSub.remove();
       linkSub.remove();
     };
