@@ -40,25 +40,38 @@ export function Skeleton({
     <View
       style={[
         styles.base,
-        { backgroundColor: theme.surface, height, borderRadius },
+        {
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+          height,
+          borderRadius,
+        },
         style,
       ]}
       accessibilityRole="progressbar"
       accessibilityLabel="Loading"
     >
-      <Animated.View style={[styles.sweep, highlight]} />
+      <Animated.View
+        style={[
+          styles.sweep,
+          { backgroundColor: theme.text },
+          highlight,
+        ]}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  base: { overflow: 'hidden' },
+  base: {
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   sweep: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     width: 120,
-    backgroundColor: '#ffffff',
     opacity: 0.05,
   },
 });

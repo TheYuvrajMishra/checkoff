@@ -639,7 +639,7 @@ export default function TodayScreen() {
           >
             <PressableScale
               onPress={() => setViewMode('list')}
-              hitSlop={4}
+              hitSlop={HIT_SLOP}
               style={styles.toggleItem}
               innerStyle={[
                 styles.toggleInner,
@@ -664,7 +664,7 @@ export default function TodayScreen() {
             </PressableScale>
             <PressableScale
               onPress={() => setViewMode('timeline')}
-              hitSlop={4}
+              hitSlop={HIT_SLOP}
               style={styles.toggleItem}
               innerStyle={[
                 styles.toggleInner,
@@ -900,7 +900,7 @@ function FilterChip({
   return (
     <PressableScale
       onPress={onPress}
-      hitSlop={4}
+      hitSlop={HIT_SLOP}
       innerStyle={[
         styles.filterChip,
         {

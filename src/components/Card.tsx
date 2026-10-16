@@ -4,11 +4,14 @@ import { PressableScale } from './PressableScale';
 
 interface Props {
   children: React.ReactNode;
-  variant?: 'default' | 'elevated' | 'recessed';
+  variant?: 'default' | 'elevated' | 'recessed' | 'outlined';
+  /** Shorthand for variant="elevated" */
+  elevated?: boolean;
   /** Monotone priority/category left rule color */
   leftRuleColor?: string;
   onPress?: (e: GestureResponderEvent) => void;
   onLongPress?: (e: GestureResponderEvent) => void;
+  /** Either an 8pt multiplier (<= 6, e.g. 2 -> 16px) or raw pixel value (e.g. space(2)) */
   padding?: number;
   style?: StyleProp<ViewStyle>;
   innerStyle?: StyleProp<ViewStyle>;
@@ -24,6 +27,7 @@ interface Props {
 export function Card({
   children,
   variant = 'default',
+  elevated = false,
   leftRuleColor,
   onPress,
   onLongPress,
@@ -33,15 +37,18 @@ export function Card({
   accessibilityLabel,
 }: Props) {
   const theme = useTheme();
+  const resolvedVariant = elevated ? 'elevated' : variant;
+  const resolvedPadding = padding > 0 && padding <= 6 ? space(padding) : padding;
 
   const bg =
-    variant === 'elevated'
+    resolvedVariant === 'elevated'
       ? theme.surface2
-      : variant === 'recessed'
+      : resolvedVariant === 'recessed' || resolvedVariant === 'outlined'
         ? theme.bg
         : theme.surface;
 
-  const borderColor = variant === 'elevated' ? theme.borderStrong : theme.border;
+  const borderColor =
+    resolvedVariant === 'elevated' ? theme.borderStrong : theme.border;
 
   const content = (
     <View
@@ -50,7 +57,7 @@ export function Card({
         {
           backgroundColor: bg,
           borderColor,
-          padding,
+          padding: resolvedPadding,
         },
         innerStyle,
       ]}

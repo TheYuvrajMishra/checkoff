@@ -282,7 +282,6 @@ function MenuRow({
 
 const styles = StyleSheet.create({
   actions: {
-    paddingHorizontal: space(2.5),
     paddingBottom: space(1),
     gap: space(1),
   },
@@ -318,7 +317,6 @@ const styles = StyleSheet.create({
     ...type.small,
   },
   rescheduleWrap: {
-    paddingHorizontal: space(2.5),
     paddingBottom: space(1),
     gap: space(1.5),
   },

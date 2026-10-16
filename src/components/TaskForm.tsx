@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.pill,
     paddingHorizontal: space(2),
-    minHeight: 42,
+    minHeight: TAP,
     justifyContent: 'center',
   },
   chipDot: { width: 7, height: 7, borderRadius: 3.5 },
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: space(2),
-    minHeight: 42,
+    minHeight: TAP,
     justifyContent: 'center',
   },
   timeButtonText: {
@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: space(2),
-    minHeight: 44,
+    minHeight: TAP,
     justifyContent: 'center',
   },
   datePillText: {

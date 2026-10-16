@@ -6,6 +6,7 @@ import {
   PanResponder,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -32,6 +33,7 @@ interface Props {
   onClose: () => void;
   title?: string;
   subtitle?: string;
+  maxHeightPct?: number;
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
 }
@@ -52,6 +54,7 @@ export function Sheet({
   onClose,
   title,
   subtitle,
+  maxHeightPct = 0.92,
   children,
   contentStyle,
 }: Props) {
@@ -156,6 +159,7 @@ export function Sheet({
           style={[
             styles.sheet,
             {
+              maxHeight: `${Math.round(maxHeightPct * 100)}%`,
               backgroundColor: theme.surface,
               borderColor: theme.borderStrong,
               paddingBottom: Math.max(insets.bottom, space(2)),
@@ -202,7 +206,14 @@ export function Sheet({
             )}
           </View>
 
-          {children}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            {children}
+          </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
@@ -215,13 +226,16 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    maxHeight: '92%',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     overflow: 'hidden',
+  },
+  scrollContent: {
+    paddingHorizontal: space(2.5),
+    paddingBottom: space(2),
   },
   topHighlight: {
     position: 'absolute',

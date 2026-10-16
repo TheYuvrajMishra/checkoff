@@ -28,6 +28,7 @@ import {
   timerNotificationIds,
 } from '../timers';
 import { haptics } from '../haptics';
+import { cancelTaskAlarm } from '../notifications';
 import { useUiStore } from '../state/ui';
 import { dark, light, radius, space, TAP, type } from '../theme/tokens';
 import { Button } from '../components/Button';
@@ -315,6 +316,7 @@ export default function TimerScreen() {
         taskInstanceId: instance.id,
         payload: { via: 'timer-screen' },
       });
+      await cancelTaskAlarm(instance.id).catch(() => {});
       await haptics.complete();
       setMarkedDone(true);
       setInstance({ ...instance, status: 'done' });
@@ -615,7 +617,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   segmentBtn: {
-    minHeight: TAP - 4,
+    minHeight: TAP,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -623,7 +625,7 @@ const styles = StyleSheet.create({
   segmentText: { ...type.small, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space(1) },
   chip: {
-    minHeight: 42,
+    minHeight: TAP,
     paddingHorizontal: space(2),
     borderRadius: radius.pill,
     borderWidth: 1,
