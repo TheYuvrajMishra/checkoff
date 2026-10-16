@@ -35,6 +35,9 @@ import { Button } from '../../components/Button';
 import { FAB_CLEARANCE } from '../../components/Fab';
 import { haptics } from '../../haptics';
 
+/** Primary accent — matches the Today page (migration from amber to purple). */
+const PURPLE = '#8B5CF6';
+
 const TYPE_FILTERS: ('all' | LogEventType)[] = [
   'all',
   'created',
@@ -174,7 +177,7 @@ export default function LogScreen() {
           const title =
             titles[e.taskInstanceId ?? ''] ?? titles[e.templateId ?? ''] ?? '';
           return [
-            e.id,
+            String(e.id),
             e.tsUtc,
             String(e.tsOffsetMin),
             e.eventType,
@@ -245,6 +248,9 @@ export default function LogScreen() {
           <MetallicText variant="h2" palette={p} numberOfLines={1}>
             Event Logs
           </MetallicText>
+          <Text style={[styles.headerSub, { color: p.textSecondary }]} numberOfLines={2}>
+            Every state transition, preserved in order.
+          </Text>
         </View>
 
         <View style={styles.exportBtns}>
@@ -252,7 +258,6 @@ export default function LogScreen() {
             label="JSON"
             size="sm"
             variant="secondary"
-            palette={p}
             icon={<Download size={13} color={p.textPrimary} />}
             disabled={exporting || visible.length === 0}
             onPress={() => void exportLog('json')}
@@ -261,7 +266,6 @@ export default function LogScreen() {
             label="CSV"
             size="sm"
             variant="secondary"
-            palette={p}
             icon={<Download size={13} color={p.textPrimary} />}
             disabled={exporting || visible.length === 0}
             onPress={() => void exportLog('csv')}
@@ -358,16 +362,17 @@ export default function LogScreen() {
                 style={[
                   styles.chip,
                   {
-                    backgroundColor: active ? p.textPrimary : p.bgSurface,
-                    borderColor: active ? p.textPrimary : p.border,
+                    backgroundColor: active ? PURPLE : p.bgSurface,
+                    borderColor: active ? PURPLE : p.border,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.chipText,
-                    { color: active ? p.textInverse : p.textSecondary },
+                    { color: active ? '#FFFFFF' : p.textSecondary },
                   ]}
+                  numberOfLines={1}
                 >
                   {tf.replace(/_/g, ' ').toUpperCase()}
                 </Text>
@@ -476,6 +481,10 @@ const styles = StyleSheet.create({
     ...type.label,
     marginBottom: 2,
   },
+  headerSub: {
+    ...type.caption,
+    marginTop: 2,
+  },
   exportBtns: {
     flexDirection: 'row',
     gap: 6,
@@ -578,7 +587,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   emptyBox: {
-    paddingVertical: space['2xl'],
+    paddingVertical: space.xl,
     alignItems: 'center',
     gap: 6,
   },

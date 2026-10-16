@@ -4,7 +4,7 @@
  * - Linear/eased 180ms indicator (zero bounce, zero overshoot).
  * - Lucide vector icons only (no emoji), 48dp minimum touch targets.
  * - Respects gesture-navigation bottom insets.
- * - Rewards tab shows a small orange dot when a daily reward is claimable.
+ * - Rewards tab shows a small purple dot when a daily reward is claimable.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
@@ -131,7 +131,7 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
       pointerEvents="box-none"
     >
       <BlurView
-        intensity={80}
+        intensity={100}
         tint={theme.name === 'light' ? 'light' : 'dark'}
         style={styles.blur}
       >
@@ -142,15 +142,15 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
               borderColor: theme.borderStrong,
               backgroundColor:
                 theme.name === 'light'
-                  ? 'rgba(255, 255, 255, 0.88)'
-                  : 'rgba(10, 10, 10, 0.88)',
+                  ? 'rgba(255, 255, 255, 0.6)'
+                  : 'rgba(10, 10, 10, 0.6)',
             },
           ]}
         >
           {/* Specular top highlight */}
           <View
             pointerEvents="none"
-            style={[styles.topHighlight, { backgroundColor: theme.topHighlight }]}
+            style={[styles.topHighlight, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}
           />
 
           <View
@@ -164,13 +164,13 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
                   styles.indicator,
                   indicatorStyle,
                   {
-                    backgroundColor: theme.accentDim,
-                    borderColor: theme.borderStrong,
+                    backgroundColor: 'rgba(139, 92, 246, 0.18)',
+                    borderColor: 'rgba(139, 92, 246, 0.45)',
                   },
                 ]}
               >
                 <View
-                  style={[styles.indicatorTopLine, { backgroundColor: theme.text }]}
+                  style={[styles.indicatorTopLine, { backgroundColor: '#8B5CF6' }]}
                 />
               </Animated.View>
             )}
@@ -179,7 +179,12 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
               const focused = activeVisibleIndex === idx;
               const meta = TAB_META[route.name] ?? TAB_META.index;
               const Icon = meta.Icon;
-              const color = focused ? theme.text : theme.textFaint;
+              // Solid colors only — icons and labels stay fully legible over the blur.
+              const color = focused
+                ? theme.name === 'light'
+                  ? '#7C3AED'
+                  : '#C4B5FD'
+                : theme.textFaint;
 
               return (
                 <PressableScale
@@ -329,6 +334,6 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 4.5,
-    backgroundColor: '#F97316',
+    backgroundColor: '#8B5CF6',
   },
 });

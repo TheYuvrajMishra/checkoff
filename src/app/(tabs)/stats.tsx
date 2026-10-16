@@ -1,15 +1,37 @@
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
-import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { Award, ChartColumn, Flame } from 'lucide-react-native';
+import Svg, {
+  Circle,
+  Defs,
+  Line,
+  LinearGradient,
+  Polyline,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
+import {
+  Award,
+  CalendarDays,
+  ChartColumn,
+  Clock,
+  Flame,
+  Medal,
+  Sparkles,
+  Target,
+  Timer,
+  TrendingUp,
+  Trophy,
+  Zap,
+} from 'lucide-react-native';
 import { useDb } from '../../db/useDb';
 import { logEvent } from '../../db/log';
 import { getMeta, setMeta } from '../../db/repos/meta';
 import { useUiStore } from '../../state/ui';
-import { categoryColor, dark, light, radius, space, type } from '../../theme/tokens';
+import { categoryColor, dark, light, radius, space, type, type ThemePalette } from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
 import { Skeleton } from '../../components/Skeleton';
@@ -21,6 +43,7 @@ import {
   categoryMinutes,
   completedTimestamps,
   instancesInRange,
+  sessionsInRange,
   skillMinutes,
   skillNames,
   categoryName,
@@ -28,6 +51,16 @@ import {
 import { addDays, localDateString } from '../../db/time';
 import type { TaskInstance } from '../../db/types';
 import { haptics } from '../../haptics';
+
+/**
+ * Purple accent family — the app is migrating from amber #F97316 to purple,
+ * so all accents and charts on this screen use purple.
+ */
+const PURPLE = '#8B5CF6';
+const PURPLE_DEEP = '#7C3AED';
+const PURPLE_LIGHT = '#A855F7';
+const PURPLE_PALE = 'rgba(139, 92, 246, 0.16)';
+const PURPLE_DARK = '#4C1D95';
 
 const MILESTONES = [7, 30, 100];
 
@@ -42,10 +75,27 @@ function fmtMin(min: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+function fmtShort(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d)
+    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+    .toUpperCase();
+}
+
 interface DayRituals {
   rituals: number;
   done: number;
   failed: number;
+}
+
+interface DayRate {
+  date: string;
+  dow: string;
+  dayNum: string;
+  rate: number;
+  done: number;
+  total: number;
+  isToday: boolean;
 }
 
 interface StatsData {
@@ -57,6 +107,9 @@ interface StatsData {
   rate30Label: string;
   onTimeRate: number | null;
   ritualAdherence: number | null;
+  focusMin: number;
+  daily: DayRate[];
+  rangeLabel: string;
   categories: { id: string; name: string; color: string; minutes: number }[];
   skills: { id: string; name: string; minutes: number }[];
   weeks: { label: string; rate: number }[];
@@ -258,13 +311,47 @@ export default function StatsScreen() {
     const ritualAdherence =
       rituals30.length > 0 ? pct(ritualsDone30, rituals30.length) : null;
 
+    // Total focus minutes over the last 30 days from timer sessions.
+    const [fy, fm, fd] = from30.split('-').map(Number);
+    const sessions30 = await sessionsInRange(
+      db,
+      new Date(fy, fm - 1, fd, 0, 0, 0).toISOString(),
+      new Date().toISOString()
+    );
+    let focusMin = 0;
+    for (const s of sessions30) {
+      if (!s.endedAtUtc) continue;
+      const ms =
+        new Date(s.endedAtUtc).getTime() - new Date(s.startedAtUtc).getTime();
+      if (ms > 0) focusMin += ms / 60000;
+    }
+
+    // Per-day completion rates for the last 7 days (drives the bar chart).
+    const daily: DayRate[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const ds = addDays(today, -i);
+      const slice = allInstances.filter((x) => x.date === ds);
+      const d = slice.filter((x) => x.status === 'done').length;
+      const [yy, mm, dd] = ds.split('-').map(Number);
+      const dt = new Date(yy, mm - 1, dd);
+      daily.push({
+        date: ds,
+        dow: dt.toLocaleDateString('en-GB', { weekday: 'narrow' }).toUpperCase(),
+        dayNum: String(dd),
+        rate: pct(d, slice.length),
+        done: d,
+        total: slice.length,
+        isToday: ds === today,
+      });
+    }
+
     const categories = Object.entries(catMin30)
       .map(([id, minutes]) => {
         const meta = catMeta[id];
         return {
           id,
           name: meta?.name ?? cNames[id] ?? id,
-          color: categoryColor(palette, meta?.colorToken ?? 'catCustom'),
+          color: categoryColor(meta?.colorToken ?? 'catCustom', theme),
           minutes,
         };
       })
@@ -287,8 +374,8 @@ export default function StatsScreen() {
       const we = addDays(ws, 6);
       const slice = allInstances.filter((i) => i.date >= ws && i.date <= we);
       const d = slice.filter((i) => i.status === 'done').length;
-      const [, mm, dd] = ws.split('-');
-      weeks.push({ label: `${mm}/${dd}`, rate: pct(d, slice.length) });
+      const [, mth, day] = ws.split('-');
+      weeks.push({ label: `${mth}/${day}`, rate: pct(d, slice.length) });
     }
 
     const hours = new Array<number>(24).fill(0);
@@ -368,6 +455,9 @@ export default function StatsScreen() {
       rate30Label: `${done30}/${inst30.length}`,
       onTimeRate,
       ritualAdherence,
+      focusMin: Math.round(focusMin),
+      daily,
+      rangeLabel: `${fmtShort(from30)} – ${fmtShort(today)}`,
       categories,
       skills,
       weeks,
@@ -377,7 +467,7 @@ export default function StatsScreen() {
       milestoneBanner,
       hasAnyActivity,
     });
-  }, [db, graceMin, palette, weekStart]);
+  }, [db, graceMin, theme, weekStart]);
 
   useFocusEffect(
     useCallback(() => {
@@ -385,9 +475,9 @@ export default function StatsScreen() {
     }, [load])
   );
 
-  // Responsive SVG chart widths (320dp -> 430dp+)
-  const chartW = Math.max(240, width - space.base * 2 - space.md * 2 - 8);
-  const chartH = 128;
+  // Chart widths scale off the real window width: content padding (space(2)
+  // each side) + Card padding (space.md each side). No fixed pixel widths.
+  const chartW = Math.max(280, width - space(2) * 2 - space.md * 2);
 
   if (!data) {
     return (
@@ -396,18 +486,22 @@ export default function StatsScreen() {
         style={[styles.safe, { backgroundColor: palette.bg }]}
       >
         <View style={styles.content}>
-          <Text style={[styles.eyebrow, { color: palette.textMuted }]}>
+          <Text
+            style={[styles.eyebrow, { color: palette.textMuted }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             PERFORMANCE TELEMETRY
           </Text>
           <MetallicText variant="h1" palette={palette}>
-            Stats
+            Your Progress
           </MetallicText>
-          <View style={styles.row}>
-            <Skeleton height={116} borderRadius={radius.lg} style={{ flex: 1 }} />
-            <Skeleton height={116} borderRadius={radius.lg} style={{ flex: 1 }} />
+          <View style={styles.grid}>
+            <Skeleton height={148} borderRadius={radius.lg} style={{ flex: 1, minWidth: 152 }} />
+            <Skeleton height={148} borderRadius={radius.lg} style={{ flex: 1, minWidth: 152 }} />
           </View>
+          <Skeleton height={220} borderRadius={radius.lg} />
           <Skeleton height={180} borderRadius={radius.lg} />
-          <Skeleton height={160} borderRadius={radius.lg} />
         </View>
       </SafeAreaView>
     );
@@ -421,19 +515,23 @@ export default function StatsScreen() {
       >
         <View style={styles.emptyWrap}>
           <View style={styles.emptyHeader}>
-            <Text style={[styles.eyebrow, { color: palette.textMuted }]}>
+            <Text
+              style={[styles.eyebrow, { color: palette.textMuted }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               PERFORMANCE TELEMETRY
             </Text>
             <MetallicText variant="h1" palette={palette}>
-              Stats
+              Your Progress
             </MetallicText>
           </View>
           <EmptyState
             icon={ChartColumn}
             title="No telemetry yet"
-            subtitle="Complete rituals and tasks to unlock monochrome completion curves, streak records, and peak-hour histograms."
-            ctaLabel="+ Create First Task"
-            onPressCta={() => setAddSheetVisible(true)}
+            subtitle="Complete rituals and tasks to unlock completion curves, streak records, and peak-hour histograms."
+            actionLabel="+ Create First Task"
+            onAction={() => setAddSheetVisible(true)}
           />
         </View>
         <AddTaskSheet
@@ -450,13 +548,22 @@ export default function StatsScreen() {
   const maxCatMin = Math.max(1, ...data.categories.map((c) => c.minutes));
   const maxSkillMin = Math.max(1, ...data.skills.map((s) => s.minutes));
   const maxHour = Math.max(1, ...data.hours);
+  const activeDays = data.daily.filter((d) => d.total > 0).length;
 
-  const linePts = data.weeks
+  // Weekly bar chart geometry (last 7 days, purple gradient bars).
+  const barChartH = 148;
+  const barTopPad = 22;
+  const barBottomPad = 24;
+  const maxBarH = barChartH - barTopPad - barBottomPad;
+  const slot = (chartW - 16) / 7;
+  const barW = Math.min(30, slot * 0.58);
+
+  // 8-week trend line geometry.
+  const trendH = 132;
+  const trendPts = data.weeks
     .map((w, idx) => {
-      const x =
-        16 +
-        (idx / Math.max(1, data.weeks.length - 1)) * (chartW - 32);
-      const y = chartH - 22 - (w.rate / 100) * (chartH - 40);
+      const x = 16 + (idx / Math.max(1, data.weeks.length - 1)) * (chartW - 32);
+      const y = trendH - 24 - (w.rate / 100) * (trendH - 44);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
@@ -478,21 +585,85 @@ export default function StatsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {/* 1 — Hero header */}
         <View>
-          <Text style={[styles.eyebrow, { color: palette.textMuted }]}>
+          <Text
+            style={[styles.eyebrow, { color: palette.textMuted }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             PERFORMANCE TELEMETRY
           </Text>
           <MetallicText variant="h1" palette={palette}>
-            Stats
+            Your Progress
           </MetallicText>
+          <Text
+            style={[styles.rangeLine, { color: palette.textSecondary }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {data.rangeLabel} · LAST 30 DAYS
+          </Text>
         </View>
 
+        {/* Streak hero — purple gradient, flame highlight */}
+        <Animated.View entering={enter(0)}>
+          <View style={[styles.hero, { borderColor: palette.border }]}>
+            <Svg style={StyleSheet.absoluteFill}>
+              <Defs>
+                <LinearGradient id="statsHeroGrad" x1="0" y1="0" x2="1" y2="1">
+                  <Stop offset="0" stopColor={PURPLE_DEEP} />
+                  <Stop offset="1" stopColor={PURPLE_DARK} />
+                </LinearGradient>
+              </Defs>
+              <Rect width="100%" height="100%" fill="url(#statsHeroGrad)" />
+            </Svg>
+            <View style={styles.heroInner}>
+              <View style={styles.heroFlameBox}>
+                <Flame size={28} color={PURPLE_DEEP} fill={PURPLE_DEEP} strokeWidth={2} />
+              </View>
+              <View style={styles.heroText}>
+                <Text
+                  style={styles.heroEyebrow}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  CURRENT STREAK
+                </Text>
+                <Text
+                  style={styles.heroValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.5}
+                >
+                  {data.currentStreak}
+                </Text>
+                <Text
+                  style={styles.heroSub}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {data.currentStreak === 1 ? 'day' : 'days'} burning · best{' '}
+                  {data.longestStreak}d
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Milestone banner (only when a new milestone is unlocked this load) */}
         {data.milestoneBanner != null ? (
-          <Animated.View entering={enter(0)}>
+          <Animated.View entering={enter(1)}>
             <Card palette={palette} variant="elevated" padding="md">
               <View style={styles.milestoneRow}>
-                <Award size={20} color={palette.textPrimary} />
-                <Text style={[styles.milestoneText, { color: palette.textPrimary }]}>
+                <View style={styles.msIconBox}>
+                  <Award size={20} color={PURPLE_LIGHT} />
+                </View>
+                <Text
+                  style={[styles.milestoneText, { color: palette.textPrimary }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
                   Milestone unlocked: {data.milestoneBanner}-day ritual streak!
                 </Text>
               </View>
@@ -500,130 +671,218 @@ export default function StatsScreen() {
           </Animated.View>
         ) : null}
 
-        {/* Streaks */}
-        <Animated.View entering={enter(1)} style={styles.row}>
-          <Card palette={palette} variant="elevated" padding="md" style={styles.halfCard}>
-            <View style={styles.metricTopRow}>
-              <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-                CURRENT STREAK
-              </Text>
-              <Flame size={15} color={palette.textSecondary} />
-            </View>
-            <MetallicText variant="display" palette={palette}>
-              {data.currentStreak}d
-            </MetallicText>
-            <Text style={[styles.cardSub, { color: palette.textSecondary }]}>
-              All daily rituals done
-            </Text>
-          </Card>
+        {/* 2 — Stat cards (wrap, 2-up on 360dp) */}
+        <View style={styles.grid}>
+          <StatCard
+            palette={palette}
+            index={2}
+            icon={<Flame size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            label="CURRENT STREAK"
+            value={`${data.currentStreak}d`}
+          />
+          <StatCard
+            palette={palette}
+            index={3}
+            icon={<Trophy size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            label="BEST STREAK"
+            value={`${data.longestStreak}d`}
+          />
+          <StatCard
+            palette={palette}
+            index={4}
+            icon={<Target size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            label="COMPLETION RATE"
+            value={`${data.rate30}%`}
+            sub={`${data.rate30Label} in 30d`}
+          />
+          <StatCard
+            palette={palette}
+            index={5}
+            icon={<Timer size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            label="FOCUS TIME"
+            value={fmtMin(data.focusMin)}
+            sub="last 30 days"
+          />
+        </View>
 
-          <Card palette={palette} padding="md" style={styles.halfCard}>
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              LONGEST STREAK
-            </Text>
-            <MetallicText variant="display" palette={palette}>
-              {data.longestStreak}d
-            </MetallicText>
-            <Text style={[styles.cardSub, { color: palette.textSecondary }]}>
-              All-time record
-            </Text>
-          </Card>
-        </Animated.View>
-
-        {/* 7d & 30d Completion Rates */}
-        <Animated.View entering={enter(2)} style={styles.row}>
-          <Card palette={palette} padding="md" style={styles.halfCard}>
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              7-DAY RATE
-            </Text>
-            <MetallicText variant="h1" palette={palette}>
-              {data.rate7}%
-            </MetallicText>
-            <Text style={[styles.cardSub, { color: palette.textSecondary }]}>
-              {data.rate7Label} tasks done
-            </Text>
-          </Card>
-
-          <Card palette={palette} padding="md" style={styles.halfCard}>
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              30-DAY RATE
-            </Text>
-            <MetallicText variant="h1" palette={palette}>
-              {data.rate30}%
-            </MetallicText>
-            <Text style={[styles.cardSub, { color: palette.textSecondary }]}>
-              {data.rate30Label} tasks done
-            </Text>
-          </Card>
-        </Animated.View>
-
-        {/* On-time & Ritual adherence */}
-        <Animated.View entering={enter(3)} style={styles.row}>
-          <Card palette={palette} padding="md" style={styles.halfCard}>
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              ON-TIME (±{graceMin}M)
-            </Text>
-            <MetallicText variant="h1" palette={palette}>
-              {data.onTimeRate == null ? '—' : `${data.onTimeRate}%`}
-            </MetallicText>
-            <Text style={[styles.cardSub, { color: palette.textSecondary }]}>
-              30d alarmed tasks
-            </Text>
-          </Card>
-
-          <Card palette={palette} padding="md" style={styles.halfCard}>
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              RITUAL ADHERENCE
-            </Text>
-            <MetallicText variant="h1" palette={palette}>
-              {data.ritualAdherence == null ? '—' : `${data.ritualAdherence}%`}
-            </MetallicText>
-            <Text style={[styles.cardSub, { color: palette.textSecondary }]}>
-              30d morning rituals
-            </Text>
-          </Card>
-        </Animated.View>
-
-        {/* Weekly Trend (8 weeks monotone SVG line chart) */}
-        <Animated.View entering={enter(4)}>
+        {/* Milestones / badges */}
+        <Animated.View entering={enter(6)}>
           <Card palette={palette} padding="md">
-            <View style={styles.chartHeader}>
-              <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-                WEEKLY COMPLETION TREND (8 WKS)
-              </Text>
-              <Text style={[styles.chartBadge, { color: palette.textSecondary }]}>
-                {data.weeks[data.weeks.length - 1]?.rate ?? 0}% THIS WK
-              </Text>
+            <SectionHead
+              palette={palette}
+              icon={<Medal size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              title="STREAK MILESTONES"
+              right={`${MILESTONES.filter((m) => data.currentStreak >= m).length}/${MILESTONES.length} EARNED`}
+            />
+            <View style={styles.msRow}>
+              {MILESTONES.map((ms) => {
+                const achieved = data.currentStreak >= ms;
+                return (
+                  <View key={ms} style={styles.msBadge}>
+                    <View
+                      style={[
+                        styles.msCircle,
+                        achieved
+                          ? { backgroundColor: PURPLE_PALE, borderColor: PURPLE }
+                          : {
+                              backgroundColor: 'transparent',
+                              borderColor: palette.border,
+                            },
+                      ]}
+                    >
+                      <Medal
+                        size={20}
+                        color={achieved ? PURPLE_LIGHT : palette.textFaint}
+                        strokeWidth={2}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.msNum,
+                        { color: achieved ? palette.textPrimary : palette.textMuted },
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      {ms}
+                    </Text>
+                    <Text
+                      style={[styles.msLabel, { color: palette.textMuted }]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      DAY STREAK
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
-            <Svg width={chartW} height={chartH}>
+          </Card>
+        </Animated.View>
+
+        {/* 3 — Weekly bar chart (last 7 days, scales to width) */}
+        <Animated.View entering={enter(7)}>
+          <Card palette={palette} padding="md">
+            <SectionHead
+              palette={palette}
+              icon={<ChartColumn size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              title="LAST 7 DAYS"
+              right={`${activeDays}/7 ACTIVE`}
+            />
+            <Svg width={chartW} height={barChartH}>
+              <Defs>
+                <LinearGradient id="statsBarGrad" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={PURPLE_LIGHT} />
+                  <Stop offset="1" stopColor={PURPLE_DEEP} />
+                </LinearGradient>
+              </Defs>
+              {data.daily.map((d, i) => {
+                const cx = 8 + i * slot + slot / 2;
+                const h =
+                  d.rate > 0 ? Math.max(6, (d.rate / 100) * maxBarH) : 4;
+                const y = barTopPad + (maxBarH - h);
+                const x = cx - barW / 2;
+                return (
+                  <Fragment key={d.date}>
+                    {d.rate > 0 ? (
+                      <Rect
+                        x={x}
+                        y={y}
+                        width={barW}
+                        height={h}
+                        rx={barW / 2}
+                        fill="url(#statsBarGrad)"
+                        opacity={d.isToday ? 1 : 0.8}
+                        stroke={d.isToday ? '#FFFFFF' : 'none'}
+                        strokeWidth={1.5}
+                      />
+                    ) : (
+                      <Rect
+                        x={x}
+                        y={barTopPad + maxBarH - 4}
+                        width={barW}
+                        height={4}
+                        rx={2}
+                        fill={palette.border}
+                      />
+                    )}
+                    {d.rate > 0 ? (
+                      <SvgText
+                        x={cx}
+                        y={y - 6}
+                        fontSize={9}
+                        fontWeight="700"
+                        fill={d.isToday ? PURPLE_LIGHT : palette.textMuted}
+                        textAnchor="middle"
+                      >
+                        {`${d.rate}%`}
+                      </SvgText>
+                    ) : null}
+                    <SvgText
+                      x={cx}
+                      y={barChartH - 8}
+                      fontSize={10}
+                      fontWeight={d.isToday ? '700' : '600'}
+                      fill={d.isToday ? PURPLE_LIGHT : palette.textMuted}
+                      textAnchor="middle"
+                    >
+                      {d.dow}
+                    </SvgText>
+                    <SvgText
+                      x={cx}
+                      y={barChartH}
+                      fontSize={8}
+                      fill={palette.textFaint}
+                      textAnchor="middle"
+                    >
+                      {d.dayNum}
+                    </SvgText>
+                  </Fragment>
+                );
+              })}
+            </Svg>
+          </Card>
+        </Animated.View>
+
+        {/* 4 — 8-week completion trend */}
+        <Animated.View entering={enter(8)}>
+          <Card palette={palette} padding="md">
+            <SectionHead
+              palette={palette}
+              icon={<TrendingUp size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              title="WEEKLY TREND · 8 WKS"
+              right={`${data.weeks[data.weeks.length - 1]?.rate ?? 0}% THIS WK`}
+            />
+            <Svg width={chartW} height={trendH}>
               <Line
                 x1={16}
-                y1={chartH - 22}
+                y1={trendH - 24}
                 x2={chartW - 16}
-                y2={chartH - 22}
+                y2={trendH - 24}
                 stroke={palette.border}
                 strokeWidth={1}
               />
               <Line
                 x1={16}
-                y1={18}
+                y1={20}
                 x2={chartW - 16}
-                y2={18}
-                stroke={palette.borderSubtle}
+                y2={20}
+                stroke={palette.border}
                 strokeWidth={1}
                 strokeDasharray="3,3"
               />
               <Polyline
-                points={linePts}
+                points={trendPts}
                 fill="none"
-                stroke={palette.textPrimary}
-                strokeWidth={2.25}
+                stroke={PURPLE_LIGHT}
+                strokeWidth={2.5}
               />
               {data.weeks.map((w, idx) => {
                 const x =
                   16 +
                   (idx / Math.max(1, data.weeks.length - 1)) * (chartW - 32);
-                const y = chartH - 22 - (w.rate / 100) * (chartH - 40);
+                const y = trendH - 24 - (w.rate / 100) * (trendH - 44);
                 return (
                   <Circle
                     key={w.label}
@@ -631,7 +890,7 @@ export default function StatsScreen() {
                     cy={y}
                     r={3.5}
                     fill={palette.bg}
-                    stroke={palette.textPrimary}
+                    stroke={PURPLE_LIGHT}
                     strokeWidth={2}
                   />
                 );
@@ -645,7 +904,7 @@ export default function StatsScreen() {
                   <SvgText
                     key={`lbl-${w.label}`}
                     x={x}
-                    y={chartH - 5}
+                    y={trendH - 7}
                     fontSize={9}
                     fill={palette.textMuted}
                     textAnchor="middle"
@@ -658,31 +917,79 @@ export default function StatsScreen() {
           </Card>
         </Animated.View>
 
-        {/* Time per Category */}
-        <Animated.View entering={enter(5)}>
+        {/* Consistency rows — 7d rate, on-time, ritual adherence */}
+        <Animated.View entering={enter(9)}>
           <Card palette={palette} padding="md">
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              TIME PER CATEGORY · 30 DAYS
-            </Text>
+            <SectionHead
+              palette={palette}
+              icon={<Zap size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              title="CONSISTENCY"
+            />
+            <View style={styles.metricList}>
+              <MetricRow
+                palette={palette}
+                icon={<CalendarDays size={17} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                label="7-DAY RATE"
+                sub={`${data.rate7Label} tasks done`}
+                value={`${data.rate7}%`}
+              />
+              <View style={[styles.metricDivider, { backgroundColor: palette.border }]} />
+              <MetricRow
+                palette={palette}
+                icon={<Clock size={17} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                label={`ON-TIME (±${graceMin}M)`}
+                sub="30d alarmed tasks"
+                value={data.onTimeRate == null ? '—' : `${data.onTimeRate}%`}
+              />
+              <View style={[styles.metricDivider, { backgroundColor: palette.border }]} />
+              <MetricRow
+                palette={palette}
+                icon={<Sparkles size={17} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                label="RITUAL ADHERENCE"
+                sub="30d morning rituals"
+                value={data.ritualAdherence == null ? '—' : `${data.ritualAdherence}%`}
+              />
+            </View>
+          </Card>
+        </Animated.View>
+
+        {/* Time per Category */}
+        <Animated.View entering={enter(10)}>
+          <Card palette={palette} padding="md">
+            <SectionHead
+              palette={palette}
+              title="TIME PER CATEGORY · 30 DAYS"
+            />
             {data.categories.length === 0 ? (
-              <Text style={[styles.empty, { color: palette.textMuted }]}>
+              <Text
+                style={[styles.empty, { color: palette.textMuted }]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
                 No category time logged yet.
               </Text>
             ) : (
               <View style={styles.barList}>
                 {data.categories.map((c) => {
                   const wPct = Math.max(6, Math.round((c.minutes / maxCatMin) * 100));
+                  const opacity = 0.35 + 0.65 * (c.minutes / maxCatMin);
                   return (
                     <View key={c.id} style={styles.barGroup}>
                       <View style={styles.barLabelRow}>
+                        <View
+                          style={[styles.catDot, { backgroundColor: c.color }]}
+                        />
                         <Text
                           style={[styles.barLabel, { color: palette.textPrimary }]}
                           numberOfLines={1}
+                          ellipsizeMode="tail"
                         >
                           {c.name}
                         </Text>
                         <Text
                           style={[styles.barVal, { color: palette.textSecondary }]}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
                         >
                           {fmtMin(c.minutes)}
                         </Text>
@@ -698,7 +1005,8 @@ export default function StatsScreen() {
                             styles.barFill,
                             {
                               width: `${wPct}%`,
-                              backgroundColor: c.color,
+                              backgroundColor: PURPLE,
+                              opacity,
                             },
                           ]}
                         />
@@ -712,13 +1020,18 @@ export default function StatsScreen() {
         </Animated.View>
 
         {/* Time per Skill */}
-        <Animated.View entering={enter(6)}>
+        <Animated.View entering={enter(11)}>
           <Card palette={palette} padding="md">
-            <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-              TIME PER CREATIVE SKILL · 30 DAYS
-            </Text>
+            <SectionHead
+              palette={palette}
+              title="TIME PER CREATIVE SKILL · 30 DAYS"
+            />
             {data.skills.length === 0 ? (
-              <Text style={[styles.empty, { color: palette.textMuted }]}>
+              <Text
+                style={[styles.empty, { color: palette.textMuted }]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
                 No skill timer sessions logged yet.
               </Text>
             ) : (
@@ -728,17 +1041,21 @@ export default function StatsScreen() {
                     6,
                     Math.round((s.minutes / maxSkillMin) * 100)
                   );
+                  const opacity = 0.35 + 0.65 * (s.minutes / maxSkillMin);
                   return (
                     <View key={s.id} style={styles.barGroup}>
                       <View style={styles.barLabelRow}>
                         <Text
                           style={[styles.barLabel, { color: palette.textPrimary }]}
                           numberOfLines={1}
+                          ellipsizeMode="tail"
                         >
                           {s.name}
                         </Text>
                         <Text
                           style={[styles.barVal, { color: palette.textSecondary }]}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
                         >
                           {fmtMin(s.minutes)}
                         </Text>
@@ -754,7 +1071,8 @@ export default function StatsScreen() {
                             styles.barFill,
                             {
                               width: `${wPct}%`,
-                              backgroundColor: palette.textPrimary,
+                              backgroundColor: PURPLE,
+                              opacity,
                             },
                           ]}
                         />
@@ -767,39 +1085,39 @@ export default function StatsScreen() {
           </Card>
         </Animated.View>
 
-        {/* Best Hours Histogram */}
-        <Animated.View entering={enter(7)}>
+        {/* Peak hours histogram */}
+        <Animated.View entering={enter(12)}>
           <Card palette={palette} padding="md">
-            <View style={styles.chartHeader}>
-              <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-                PEAK COMPLETION HOURS · 30 DAYS
-              </Text>
-              <Text style={[styles.chartBadge, { color: palette.textPrimary }]}>
-                {data.bestHour == null
+            <SectionHead
+              palette={palette}
+              icon={<Zap size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              title="PEAK HOURS · 30 DAYS"
+              right={
+                data.bestHour == null
                   ? 'NO PEAK YET'
-                  : `PEAK ${fmtHourLabel(data.bestHour)}`}
-              </Text>
-            </View>
+                  : `PEAK ${fmtHourLabel(data.bestHour)}`
+              }
+            />
             <Svg width={chartW} height={100}>
               {data.hours.map((count, h) => {
                 const slotW = (chartW - 12) / 24;
-                const barW = Math.max(3, slotW - 3);
-                const barH =
+                const barW24 = Math.max(3, slotW - 3);
+                const barH24 =
                   count > 0 ? Math.max(4, (count / maxHour) * 68) : 2;
                 const x = 6 + h * slotW;
-                const y = 78 - barH;
+                const y = 78 - barH24;
                 const isPeak = h === data.bestHour && count > 0;
                 return (
                   <Rect
                     key={h}
                     x={x}
                     y={y}
-                    width={barW}
-                    height={barH}
+                    width={barW24}
+                    height={barH24}
                     rx={2}
                     fill={
                       isPeak
-                        ? palette.textPrimary
+                        ? PURPLE
                         : count > 0
                           ? palette.textMuted
                           : palette.border
@@ -829,24 +1147,36 @@ export default function StatsScreen() {
 
         {/* Weekly Review */}
         {data.lastReview ? (
-          <Animated.View entering={enter(8)}>
+          <Animated.View entering={enter(13)}>
             <Card palette={palette} variant="elevated" padding="md">
-              <Text style={[styles.cardLabel, { color: palette.textMuted }]}>
-                WEEKLY REVIEW · {data.lastReview.weekStart} →{' '}
-                {data.lastReview.weekEnd}
-              </Text>
+              <SectionHead
+                palette={palette}
+                icon={<CalendarDays size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                title={`WEEKLY REVIEW · ${data.lastReview.weekStart} → ${data.lastReview.weekEnd}`}
+              />
               <MetallicText variant="h2" palette={palette}>
-                {data.lastReview.completionRate}% ({data.lastReview.done}/
-                {data.lastReview.total})
+                {`${data.lastReview.completionRate}% (${data.lastReview.done}/${data.lastReview.total})`}
               </MetallicText>
               <View style={styles.reviewList}>
-                <Text style={[styles.reviewLine, { color: palette.textSecondary }]}>
+                <Text
+                  style={[styles.reviewLine, { color: palette.textSecondary }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
                   Top category: {data.lastReview.topCategory ?? '—'}
                 </Text>
-                <Text style={[styles.reviewLine, { color: palette.textSecondary }]}>
+                <Text
+                  style={[styles.reviewLine, { color: palette.textSecondary }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
                   Top skill: {data.lastReview.topSkill ?? '—'}
                 </Text>
-                <Text style={[styles.reviewLine, { color: palette.textSecondary }]}>
+                <Text
+                  style={[styles.reviewLine, { color: palette.textSecondary }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
                   Most skipped: {data.lastReview.mostSkippedTitle ?? 'None'}
                 </Text>
               </View>
@@ -858,16 +1188,162 @@ export default function StatsScreen() {
   );
 }
 
+/* ---------------------------------- pieces ---------------------------------- */
+
+/** Section eyebrow header: small-caps muted caption + optional icon + right badge. */
+function SectionHead({
+  palette,
+  icon,
+  title,
+  right,
+}: {
+  palette: { textMuted: string; textSecondary: string };
+  icon?: React.ReactNode;
+  title: string;
+  right?: string;
+}) {
+  return (
+    <View style={styles.sectionHead}>
+      <View style={styles.sectionHeadLeft}>
+        {icon}
+        <Text
+          style={[styles.sectionTitle, { color: palette.textMuted }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {title}
+        </Text>
+      </View>
+      {right != null ? (
+        <Text
+          style={[styles.sectionRight, { color: palette.textSecondary }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {right}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Wrapping stat card: icon chip, big metallic number, label, optional sub. */
+function StatCard({
+  palette,
+  index,
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  palette: ThemePalette;
+  index: number;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(index * 35)
+        .duration(180)
+        .easing(Easing.out(Easing.cubic))}
+      style={styles.statWrap}
+    >
+      <Card palette={palette} variant="elevated" padding="md" style={styles.statCard}>
+        <View style={styles.statIconBox}>{icon}</View>
+        <MetallicText
+          variant="display"
+          palette={palette}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.55}
+          style={styles.statValue}
+        >
+          {value}
+        </MetallicText>
+        <Text
+          style={[styles.statLabel, { color: palette.textMuted }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {label}
+        </Text>
+        {sub != null ? (
+          <Text
+            style={[styles.statSub, { color: palette.textSecondary }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {sub}
+          </Text>
+        ) : null}
+      </Card>
+    </Animated.View>
+  );
+}
+
+/** Single consistency metric row: icon + label/sub + right-aligned value. */
+function MetricRow({
+  palette,
+  icon,
+  label,
+  sub,
+  value,
+}: {
+  palette: {
+    textPrimary: string;
+    textSecondary: string;
+    textMuted: string;
+  };
+  icon: React.ReactNode;
+  label: string;
+  sub: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.metricRow}>
+      <View style={styles.metricIconBox}>{icon}</View>
+      <View style={styles.metricText}>
+        <Text
+          style={[styles.metricLabel, { color: palette.textMuted }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {label}
+        </Text>
+        <Text
+          style={[styles.metricSub, { color: palette.textSecondary }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {sub}
+        </Text>
+      </View>
+      <Text
+        style={[styles.metricValue, { color: palette.textPrimary }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/* ---------------------------------- styles ---------------------------------- */
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: {
-    paddingHorizontal: space.base,
+    paddingHorizontal: space(2),
     paddingTop: space.md,
     gap: space.md,
   },
   emptyWrap: {
     flex: 1,
-    paddingHorizontal: space.base,
+    paddingHorizontal: space(2),
     paddingTop: space.md,
   },
   emptyHeader: {
@@ -877,46 +1353,213 @@ const styles = StyleSheet.create({
     ...type.label,
     marginBottom: 2,
   },
-  row: {
-    flexDirection: 'row',
-    gap: space.md,
-  },
-  halfCard: {
-    flex: 1,
-  },
-  metricTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  cardLabel: {
-    ...type.label,
-    marginBottom: 4,
-  },
-  cardSub: {
-    ...type.caption,
-    marginTop: 4,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: space.sm,
-  },
-  chartBadge: {
+  rangeLine: {
     ...type.monoSm,
-    fontWeight: '700',
+    marginTop: 6,
+    letterSpacing: 0.8,
   },
+
+  /* Hero — streak highlight */
+  hero: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  heroInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.md,
+  },
+  heroFlameBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroText: {
+    flex: 1,
+    flexShrink: 1,
+    gap: 1,
+  },
+  heroEyebrow: {
+    ...type.caption,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: 'rgba(255, 255, 255, 0.72)',
+  },
+  heroValue: {
+    fontSize: 48,
+    lineHeight: 52,
+    fontWeight: '800',
+    letterSpacing: -1.5,
+    color: '#FFFFFF',
+  },
+  heroSub: {
+    ...type.small,
+    color: 'rgba(255, 255, 255, 0.72)',
+  },
+
+  /* Milestone banner */
   milestoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
   },
+  msIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: PURPLE_PALE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   milestoneText: {
     ...type.body,
     fontWeight: '700',
     flex: 1,
+    flexShrink: 1,
   },
+
+  /* Stat grid */
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.md,
+  },
+  statWrap: {
+    flex: 1,
+    minWidth: 152,
+  },
+  statCard: {
+    flex: 1,
+    gap: 6,
+  },
+  statIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: PURPLE_PALE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: {
+    marginTop: 2,
+  },
+  statLabel: {
+    ...type.caption,
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  statSub: {
+    ...type.caption,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: 'none',
+  },
+
+  /* Section headers */
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+    marginBottom: space.sm,
+  },
+  sectionHeadLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    flexShrink: 1,
+  },
+  sectionTitle: {
+    ...type.caption,
+    flexShrink: 1,
+  },
+  sectionRight: {
+    ...type.monoSm,
+    fontWeight: '700',
+    flexShrink: 0,
+  },
+
+  /* Milestone badges */
+  msRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    marginTop: space.xs,
+  },
+  msBadge: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
+  },
+  msCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  msNum: {
+    ...type.h2,
+    fontSize: 17,
+  },
+  msLabel: {
+    ...type.caption,
+    fontSize: 8,
+    letterSpacing: 0.8,
+  },
+
+  /* Consistency rows */
+  metricList: {
+    gap: space.sm,
+  },
+  metricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  metricIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: PURPLE_PALE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  metricText: {
+    flex: 1,
+    flexShrink: 1,
+    gap: 2,
+  },
+  metricLabel: {
+    ...type.caption,
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  metricSub: {
+    ...type.small,
+    fontSize: 12,
+  },
+  metricValue: {
+    ...type.monoLg,
+    fontSize: 17,
+    minWidth: 56,
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  metricDivider: {
+    height: 1,
+    opacity: 0.6,
+  },
+
+  /* Category / skill bars */
   barList: {
     gap: space.md,
     marginTop: space.xs,
@@ -927,16 +1570,23 @@ const styles = StyleSheet.create({
   barLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.sm,
+  },
+  catDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
   },
   barLabel: {
     ...type.bodySm,
     fontWeight: '600',
     flex: 1,
+    flexShrink: 1,
   },
   barVal: {
     ...type.monoSm,
+    flexShrink: 0,
   },
   barTrack: {
     height: 8,
@@ -951,6 +1601,8 @@ const styles = StyleSheet.create({
     ...type.bodySm,
     paddingVertical: space.sm,
   },
+
+  /* Weekly review */
   reviewList: {
     gap: 4,
     marginTop: space.sm,

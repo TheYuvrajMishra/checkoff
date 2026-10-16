@@ -53,6 +53,10 @@ import {
   type UserReward,
 } from '../../rewards/engine';
 
+/** Primary accent — matches the Today page (migration from amber to purple). */
+const PURPLE = '#8B5CF6';
+const PURPLE_PALE = 'rgba(139, 92, 246, 0.14)';
+
 const BADGE_ICONS: Record<BadgeView['icon'], typeof Flame> = {
   streak: Flame,
   completions: CheckCircle2,
@@ -144,6 +148,40 @@ const emptyStyles = StyleSheet.create({
     maxWidth: 260,
   },
 });
+
+/** Section header: purple icon box + title + hint, Today-page style. */
+function SectionHeader({
+  palette,
+  icon,
+  title,
+  sub,
+}: {
+  palette: typeof dark;
+  icon: ReactNode;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <View style={styles.sectionHeaderWrap}>
+      <View
+        style={[
+          styles.sectionIconBox,
+          { backgroundColor: PURPLE_PALE, borderColor: 'rgba(139, 92, 246, 0.35)' },
+        ]}
+      >
+        {icon}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.sectionHeadTitle, { color: palette.textPrimary }]}>
+          {title}
+        </Text>
+        <Text style={[styles.sectionHeadSub, { color: palette.textMuted }]} numberOfLines={2}>
+          {sub}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export default function RewardsScreen() {
   const db = useDb();
@@ -289,6 +327,9 @@ export default function RewardsScreen() {
           <MetallicText variant="h1" palette={palette}>
             Rewards
           </MetallicText>
+          <Text style={[styles.headerSub, { color: palette.textSecondary }]}>
+            Turn discipline into currency — earn points, unlock badges, redeem treats.
+          </Text>
         </View>
 
         {/* Balance */}
@@ -303,13 +344,18 @@ export default function RewardsScreen() {
                 },
               ]}
             >
-              <Star size={22} color={palette.textPrimary} />
+              <Star size={22} color={PURPLE} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.balanceLabel, { color: palette.textMuted }]}>
                 TOTAL BALANCE
               </Text>
-              <Text style={[styles.balanceValue, { color: palette.textPrimary }]}>
+              <Text
+                style={[styles.balanceValue, { color: palette.textPrimary }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
                 {loading ? '—' : formatPoints(state.balance)}
               </Text>
             </View>
@@ -351,7 +397,7 @@ export default function RewardsScreen() {
                 styles.progressFill,
                 {
                   width: `${Math.min(100, Math.max(0, state.level.progress * 100))}%`,
-                  backgroundColor: palette.textPrimary,
+                  backgroundColor: PURPLE,
                 },
               ]}
             />
@@ -364,14 +410,12 @@ export default function RewardsScreen() {
 
         {/* Badges */}
         <Card palette={palette} padding="md">
-          <View style={styles.sectionHead}>
-            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-              Badges
-            </Text>
-            <Text style={[styles.sectionSub, { color: palette.textMuted }]}>
-              {earnedCount} / {state.badges.length} earned
-            </Text>
-          </View>
+          <SectionHeader
+            palette={palette}
+            icon={<Trophy size={17} color={PURPLE} strokeWidth={2.2} />}
+            title="Badges"
+            sub={`${earnedCount} / ${state.badges.length} earned`}
+          />
           {state.badges.length === 0 ? (
             <InlineEmpty
               palette={ui.theme}
@@ -391,7 +435,9 @@ export default function RewardsScreen() {
                       styles.badgeCell,
                       {
                         backgroundColor: earned ? palette.bgElevated : palette.bg,
-                        borderColor: earned ? palette.borderStrong : palette.border,
+                        borderColor: earned
+                          ? 'rgba(139, 92, 246, 0.45)'
+                          : palette.border,
                         opacity: earned ? 1 : 0.55,
                       },
                     ]}
@@ -400,13 +446,17 @@ export default function RewardsScreen() {
                       style={[
                         styles.badgeIconWrap,
                         {
-                          backgroundColor: palette.bgSurface,
-                          borderColor: palette.border,
+                          backgroundColor: earned
+                            ? PURPLE_PALE
+                            : palette.bgSurface,
+                          borderColor: earned
+                            ? 'rgba(139, 92, 246, 0.55)'
+                            : palette.border,
                         },
                       ]}
                     >
                       {earned ? (
-                        <Icon size={20} color={palette.textPrimary} />
+                        <Icon size={20} color={PURPLE} />
                       ) : (
                         <Lock size={18} color={palette.textFaint} />
                       )}
@@ -432,12 +482,12 @@ export default function RewardsScreen() {
 
         {/* My Rewards */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-            My Rewards
-          </Text>
-          <Text style={[styles.sectionHint, { color: palette.textMuted }]}>
-            Define your own rewards and redeem them with points.
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Gift size={17} color={PURPLE} strokeWidth={2.2} />}
+            title="My Rewards"
+            sub="Define your own rewards and redeem them with points"
+          />
 
           <View style={styles.addForm}>
             <TextInput
@@ -510,7 +560,10 @@ export default function RewardsScreen() {
                         },
                       ]}
                     >
-                      <Ticket size={16} color={palette.textSecondary} />
+                      <Ticket
+                        size={16}
+                        color={affordable ? PURPLE : palette.textFaint}
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text
@@ -544,9 +597,12 @@ export default function RewardsScreen() {
 
         {/* History */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-            History
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Star size={17} color={PURPLE} strokeWidth={2.2} />}
+            title="History"
+            sub="Every point earned and spent"
+          />
           {state.ledger.length === 0 ? (
             <InlineEmpty
               palette={ui.theme}
@@ -556,39 +612,44 @@ export default function RewardsScreen() {
             />
           ) : (
             <View style={styles.ledgerList}>
-              {state.ledger.map((entry, idx) => {
+              {state.ledger.map((entry) => {
                 const positive = entry.points >= 0;
                 return (
-                  <View key={entry.id}>
-                    <View style={styles.ledgerRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.ledgerReason, { color: palette.textPrimary }]}
-                          numberOfLines={1}
-                        >
-                          {entry.reason}
-                        </Text>
-                        <Text
-                          style={[styles.ledgerDate, { color: palette.textMuted }]}
-                        >
-                          {formatDate(entry.tsUtc)}
-                        </Text>
-                      </View>
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.ledgerRow,
+                      {
+                        backgroundColor: palette.bgElevated,
+                        borderColor: palette.border,
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
                       <Text
-                        style={[
-                          styles.ledgerPoints,
-                          { color: palette.textPrimary },
-                        ]}
+                        style={[styles.ledgerReason, { color: palette.textPrimary }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
                       >
-                        {positive ? '+' : ''}
-                        {formatPoints(entry.points)}
+                        {entry.reason}
+                      </Text>
+                      <Text
+                        style={[styles.ledgerDate, { color: palette.textMuted }]}
+                        numberOfLines={1}
+                      >
+                        {formatDate(entry.tsUtc)}
                       </Text>
                     </View>
-                    {idx < state.ledger.length - 1 && (
-                      <View
-                        style={[styles.divider, { backgroundColor: palette.border }]}
-                      />
-                    )}
+                    <Text
+                      style={[
+                        styles.ledgerPoints,
+                        { color: positive ? PURPLE : palette.textPrimary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {positive ? '+' : ''}
+                      {formatPoints(entry.points)}
+                    </Text>
                   </View>
                 );
               })}
@@ -610,6 +671,31 @@ const styles = StyleSheet.create({
   eyebrow: {
     ...type.label,
     marginBottom: 2,
+  },
+  headerSub: {
+    ...type.caption,
+    marginTop: 4,
+  },
+  sectionHeaderWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  sectionIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeadTitle: {
+    ...type.h3,
+  },
+  sectionHeadSub: {
+    ...type.caption,
+    marginTop: 1,
   },
   balanceRow: {
     flexDirection: 'row',
@@ -658,23 +744,6 @@ const styles = StyleSheet.create({
     ...type.caption,
     marginTop: space.sm,
   },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: space.md,
-  },
-  sectionTitle: {
-    ...type.h3,
-    marginBottom: space.xs,
-  },
-  sectionSub: {
-    ...type.monoSm,
-  },
-  sectionHint: {
-    ...type.caption,
-    marginBottom: space.md,
-  },
   badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -722,8 +791,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
   },
   costInput: {
-    flex: 0,
-    width: 96,
+    flex: 0.9,
+    minWidth: 0,
   },
   rewardList: {
     gap: space.sm,
@@ -751,13 +820,17 @@ const styles = StyleSheet.create({
     ...type.monoSm,
     marginTop: 2,
   },
-  ledgerList: {},
+  ledgerList: {
+    gap: space.sm,
+  },
   ledgerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: space.md,
-    paddingVertical: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   ledgerReason: {
     ...type.bodySm,
@@ -768,8 +841,5 @@ const styles = StyleSheet.create({
   },
   ledgerPoints: {
     ...type.monoLg,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
   },
 });

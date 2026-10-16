@@ -28,6 +28,7 @@ export type LogEventType =
   | 'override'
   | 'exported'
   | 'streak_milestone'
+  | 'weekly_review_generated'
   | 'timer_session_started'
   | 'timer_session_ended'
   | 'reward_redeemed'

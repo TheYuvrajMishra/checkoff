@@ -28,12 +28,14 @@ import * as Sharing from 'expo-sharing';
 import {
   ArrowRight,
   Bell,
-  Clock,
   Database,
   Download,
   FileText,
+  Info,
+  Palette,
   RefreshCw,
   ShieldCheck,
+  Vibrate,
   Volume2,
   VolumeX,
 } from 'lucide-react-native';
@@ -65,6 +67,10 @@ import {
 } from '../notifications/rewards';
 import pkg from '../../package.json';
 
+/** Primary accent — matches the Today page (migration from amber to purple). */
+const PURPLE = '#8B5CF6';
+const PURPLE_PALE = 'rgba(139, 92, 246, 0.14)';
+
 const GRACE_DETENTS = [5, 10, 15, 20, 30, 45, 60];
 const SNOOZE_DETENTS = [3, 5, 9, 10, 15, 20, 30];
 const INTENSITY_OPTIONS: HapticIntensity[] = ['light', 'medium', 'strong'];
@@ -80,6 +86,33 @@ const ALARM_SOUNDS: {
   { id: 'chime', label: 'Chime', desc: 'High-clarity harmonic double chime', rate: 1.25 },
   { id: 'industrial', label: 'Industrial', desc: 'Rapid high-urgency mechanical cadence', rate: 1.5 },
 ];
+
+/** Card section header: purple icon box + caption label, Today-page style. */
+function SectionHeader({
+  palette,
+  icon,
+  label,
+}: {
+  palette: typeof dark;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <View style={styles.sectionHeaderWrap}>
+      <View
+        style={[
+          styles.sectionIconBox,
+          { backgroundColor: PURPLE_PALE, borderColor: 'rgba(139, 92, 246, 0.35)' },
+        ]}
+      >
+        {icon}
+      </View>
+      <Text style={[styles.sectionHeadLabel, { color: palette.textMuted }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export default function SettingsScreen() {
   const db = useDb();
@@ -352,6 +385,9 @@ export default function SettingsScreen() {
           <MetallicText variant="h1" palette={palette}>
             Settings
           </MetallicText>
+          <Text style={[styles.headerSub, { color: palette.textSecondary }]}>
+            Alarms, haptics, theme, and data — every change applies instantly.
+          </Text>
         </View>
 
         {/* Append-Only Event Log Card */}
@@ -374,7 +410,7 @@ export default function SettingsScreen() {
                 },
               ]}
             >
-              <FileText size={20} color={palette.textPrimary} />
+              <FileText size={20} color={PURPLE} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.portalTitle, { color: palette.textPrimary }]}>
@@ -390,9 +426,11 @@ export default function SettingsScreen() {
 
         {/* Appearance & Regional */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
-            APPEARANCE & TIME
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Palette size={16} color={PURPLE} strokeWidth={2.2} />}
+            label="APPEARANCE & TIME"
+          />
 
           {/* Theme Mode: Dark / Light / System */}
           <View style={styles.blockRow}>
@@ -420,7 +458,7 @@ export default function SettingsScreen() {
                     style={[
                       styles.segmentBtn,
                       active && {
-                        backgroundColor: palette.textPrimary,
+                        backgroundColor: PURPLE,
                       },
                     ]}
                   >
@@ -429,7 +467,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? palette.textInverse
+                            ? '#FFFFFF'
                             : palette.textSecondary,
                         },
                       ]}
@@ -468,7 +506,7 @@ export default function SettingsScreen() {
                     onPress={() => setClockFormat(fmt)}
                     style={[
                       styles.segmentCompactBtn,
-                      active && { backgroundColor: palette.textPrimary },
+                      active && { backgroundColor: PURPLE },
                     ]}
                   >
                     <Text
@@ -476,7 +514,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? palette.textInverse
+                            ? '#FFFFFF'
                             : palette.textSecondary,
                         },
                       ]}
@@ -520,7 +558,7 @@ export default function SettingsScreen() {
                     onPress={() => setWeekStart(w.id)}
                     style={[
                       styles.segmentCompactBtn,
-                      active && { backgroundColor: palette.textPrimary },
+                      active && { backgroundColor: PURPLE },
                     ]}
                   >
                     <Text
@@ -528,7 +566,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? palette.textInverse
+                            ? '#FFFFFF'
                             : palette.textSecondary,
                         },
                       ]}
@@ -544,9 +582,11 @@ export default function SettingsScreen() {
 
         {/* Alarm Sound Picker & Windows */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
-            ALARMS & WINDOWS
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Volume2 size={16} color={PURPLE} strokeWidth={2.2} />}
+            label="ALARMS & WINDOWS"
+          />
 
           <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
             Alarm Sound Profile
@@ -578,7 +618,7 @@ export default function SettingsScreen() {
                         ? palette.bgElevated
                         : palette.bg,
                       borderColor: selected
-                        ? palette.textPrimary
+                        ? PURPLE
                         : palette.border,
                       borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                     },
@@ -591,6 +631,7 @@ export default function SettingsScreen() {
                           styles.soundLabel,
                           { color: palette.textPrimary },
                         ]}
+                        numberOfLines={1}
                       >
                         {snd.label}
                       </Text>
@@ -598,7 +639,7 @@ export default function SettingsScreen() {
                         <Text
                           style={[
                             styles.activeTag,
-                            { color: palette.textSecondary },
+                            { color: PURPLE },
                           ]}
                         >
                           ACTIVE
@@ -608,6 +649,7 @@ export default function SettingsScreen() {
                     <Text
                       style={[styles.soundDesc, { color: palette.textMuted }]}
                       numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
                       {snd.desc}
                     </Text>
@@ -617,14 +659,14 @@ export default function SettingsScreen() {
                       styles.previewCircle,
                       {
                         backgroundColor: playing
-                          ? palette.textPrimary
+                          ? PURPLE
                           : palette.bgSurface,
-                        borderColor: palette.borderStrong,
+                        borderColor: playing ? PURPLE : palette.borderStrong,
                       },
                     ]}
                   >
                     {playing ? (
-                      <VolumeX size={15} color={palette.textInverse} />
+                      <VolumeX size={15} color="#FFFFFF" />
                     ) : (
                       <Volume2 size={15} color={palette.textPrimary} />
                     )}
@@ -661,9 +703,11 @@ export default function SettingsScreen() {
 
         {/* Reward Notifications */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
-            REWARD NOTIFICATIONS
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Bell size={16} color={PURPLE} strokeWidth={2.2} />}
+            label="REWARD NOTIFICATIONS"
+          />
 
           <View style={styles.rewardHeadRow}>
             <Bell size={16} color={palette.textSecondary} />
@@ -817,9 +861,11 @@ export default function SettingsScreen() {
 
         {/* Tactile Haptics */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
-            TACTILE ENGINE
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Vibrate size={16} color={PURPLE} strokeWidth={2.2} />}
+            label="TACTILE ENGINE"
+          />
 
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
@@ -859,7 +905,7 @@ export default function SettingsScreen() {
                     disabled={!ui.hapticsEnabled}
                     style={[
                       styles.segmentBtn,
-                      active && { backgroundColor: palette.textPrimary },
+                      active && { backgroundColor: PURPLE },
                       !ui.hapticsEnabled && { opacity: 0.4 },
                     ]}
                   >
@@ -868,7 +914,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? palette.textInverse
+                            ? '#FFFFFF'
                             : palette.textSecondary,
                         },
                       ]}
@@ -884,9 +930,11 @@ export default function SettingsScreen() {
 
         {/* Data Backup & Export */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
-            DATA SOVEREIGNTY & BACKUP
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Database size={16} color={PURPLE} strokeWidth={2.2} />}
+            label="DATA SOVEREIGNTY & BACKUP"
+          />
 
           <View style={styles.backupRow}>
             <Database size={18} color={palette.textSecondary} />
@@ -899,7 +947,6 @@ export default function SettingsScreen() {
             <Button
               label={backingUp ? 'Exporting Backup...' : 'Export Full Backup (JSON)'}
               variant="secondary"
-              palette={palette}
               loading={backingUp}
               icon={<Download size={15} color={palette.textPrimary} />}
               onPress={() => void exportFullBackup()}
@@ -910,9 +957,11 @@ export default function SettingsScreen() {
 
         {/* About & Version */}
         <Card palette={palette} padding="md">
-          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
-            ABOUT CHECKOFF
-          </Text>
+          <SectionHeader
+            palette={palette}
+            icon={<Info size={16} color={PURPLE} strokeWidth={2.2} />}
+            label="ABOUT CHECKOFF"
+          />
 
           <View style={styles.inlineRow}>
             <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
@@ -977,9 +1026,26 @@ const styles = StyleSheet.create({
     ...type.label,
     marginBottom: 2,
   },
-  sectionHeader: {
-    ...type.label,
+  headerSub: {
+    ...type.caption,
+    marginTop: 4,
+  },
+  sectionHeaderWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
     marginBottom: space.md,
+  },
+  sectionIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeadLabel: {
+    ...type.label,
   },
   logPortalRow: {
     flexDirection: 'row',

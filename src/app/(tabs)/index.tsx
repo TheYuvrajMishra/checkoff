@@ -29,7 +29,7 @@ import {
   ChevronRight,
   Clock,
   Flame,
-  Gift,
+  Trophy,
   List,
   MoreVertical,
   Play,
@@ -80,11 +80,11 @@ import type { Category, Priority, TaskInstance } from '../../db/types';
 
 const AnimatedCircle = createAnimatedComponent(Circle);
 
-/** Mockup accent — warm orange used for hero-adjacent highlights, ring, dots. */
-const ORANGE = '#F97316';
-const ORANGE_DEEP = '#EA580C';
-const ORANGE_SOFT = '#FB923C';
-const ORANGE_PALE = 'rgba(249, 115, 22, 0.14)';
+/** Primary accent — rich purple used for hero-adjacent highlights, ring, dots. */
+const PURPLE = '#8B5CF6';
+const PURPLE_DEEP = '#7C3AED';
+const PURPLE_SOFT = '#A855F7';
+const PURPLE_PALE = 'rgba(139, 92, 246, 0.14)';
 
 type HeroKey = 'dawn' | 'day' | 'dusk' | 'night';
 
@@ -120,6 +120,14 @@ function nextupSource(): number | null {
   }
 }
 
+function rewardChestSource(): number | null {
+  try {
+    return require('../../assets/reward-chest.webp');
+  } catch {
+    return null;
+  }
+}
+
 function heroKeyForHour(h: number): HeroKey {
   if (h >= 5 && h < 8) return 'dawn';
   if (h >= 8 && h < 17) return 'day';
@@ -132,8 +140,6 @@ function greetingForHour(h: number): string {
   if (h >= 12 && h < 17) return 'Good afternoon,';
   return 'Good evening,';
 }
-
-const REWARD_DAYS = ['Day 1', 'Day 2', 'Day 3', 'Day 5', 'Day 7'];
 
 function weekdayShort(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -149,7 +155,7 @@ function dayNum(dateStr: string): string {
 function priorityDotColor(p: Priority): string {
   if (p === 'high') return '#EF4444';
   if (p === 'low') return '#22C55E';
-  return ORANGE;
+  return PURPLE;
 }
 
 function priorityLabel(p: Priority): string {
@@ -215,8 +221,8 @@ export default function TodayScreen() {
 
   // Daily reward state from the real rewards engine.
   const [rewardState, setRewardState] = useState<DailyRewardState | null>(null);
-  // Shown day numbers on the 5-gift strip (mockup omits Day 4 and Day 6).
-  const SHOWN_DAYS = [1, 2, 3, 5, 7];
+  // Shown day numbers on the 7-day reward track.
+  const SHOWN_DAYS = [1, 2, 3, 4, 5, 6, 7];
   const claimableIndex = (() => {
     const day = rewardState?.currentDay ?? 1;
     const exact = SHOWN_DAYS.indexOf(day);
@@ -653,7 +659,7 @@ export default function TodayScreen() {
                 style={styles.dayCellWrap}
                 innerStyle={[
                   styles.dayCell,
-                  { backgroundColor: selected ? ORANGE : 'transparent' },
+                  { backgroundColor: selected ? PURPLE : 'transparent' },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={`${weekdayShort(d)} ${dayNum(d)}`}
@@ -691,7 +697,7 @@ export default function TodayScreen() {
                       backgroundColor: hasTasks
                         ? selected
                           ? '#FFFFFF'
-                          : ORANGE
+                          : PURPLE
                         : 'transparent',
                     },
                   ]}
@@ -741,25 +747,25 @@ export default function TodayScreen() {
           </View>
           <View style={[styles.statsRow, { borderTopColor: theme.border }]}>
             <StatCell
-              icon={<Flame color={ORANGE} size={20} strokeWidth={2.2} />}
+              icon={<Flame color={PURPLE} size={20} strokeWidth={2.2} />}
               value={`${header.streak}d`}
               label="Day Streak"
               theme={theme}
             />
             <StatCell
-              icon={<Target color={ORANGE} size={20} strokeWidth={2.2} />}
+              icon={<Target color={PURPLE} size={20} strokeWidth={2.2} />}
               value={`${plannedCount}`}
               label="Tasks Today"
               theme={theme}
             />
             <StatCell
-              icon={<BarChart3 color={ORANGE} size={20} strokeWidth={2.2} />}
+              icon={<BarChart3 color={PURPLE} size={20} strokeWidth={2.2} />}
               value={focusLabel}
               label="Focus Time"
               theme={theme}
             />
             <StatCell
-              icon={<Star color={ORANGE} size={20} strokeWidth={2.2} />}
+              icon={<Star color={PURPLE} size={20} strokeWidth={2.2} />}
               value={`${header.points}`}
               label="Total Points"
               theme={theme}
@@ -779,10 +785,9 @@ export default function TodayScreen() {
           onMarkDone={() => nextUp && handleToggle(nextUp)}
         />
 
-        {/* 5 — Daily Reward strip (wired to rewards engine) */}
+        {/* 5 — Daily Reward card (wired to rewards engine) */}
         <DailyRewardStrip
           theme={theme}
-          currentDay={rewardState?.currentDay ?? 1}
           claimed={rewardClaimed}
           claimableIndex={claimableIndex}
           claimable={rewardClaimable}
@@ -824,7 +829,7 @@ export default function TodayScreen() {
             innerStyle={[
               styles.quickSend,
               {
-                backgroundColor: quickTitle.trim() ? ORANGE : theme.surface2,
+                backgroundColor: quickTitle.trim() ? PURPLE : theme.surface2,
               },
             ]}
             accessibilityRole="button"
@@ -852,7 +857,7 @@ export default function TodayScreen() {
               hitSlop={HIT_SLOP}
               innerStyle={[
                 styles.toggleInner,
-                viewMode === 'list' && { backgroundColor: ORANGE },
+                viewMode === 'list' && { backgroundColor: PURPLE },
               ]}
               accessibilityRole="button"
               accessibilityLabel="List view"
@@ -876,7 +881,7 @@ export default function TodayScreen() {
               hitSlop={HIT_SLOP}
               innerStyle={[
                 styles.toggleInner,
-                viewMode === 'timeline' && { backgroundColor: ORANGE },
+                viewMode === 'timeline' && { backgroundColor: PURPLE },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Timeline view"
@@ -909,7 +914,7 @@ export default function TodayScreen() {
           {(
             [
               { key: 'high', label: 'High Prio', dot: '#EF4444' },
-              { key: 'medium', label: 'Med Prio', dot: ORANGE },
+              { key: 'medium', label: 'Med Prio', dot: PURPLE },
               { key: 'low', label: 'Low Prio', dot: '#22C55E' },
             ] as const
           ).map((f) => (
@@ -962,7 +967,7 @@ export default function TodayScreen() {
             {timelineGroups.map((group) => (
               <View key={group.label} style={styles.timelineBlock}>
                 <View style={styles.timelineHeader}>
-                  <View style={[styles.timelineDot, { backgroundColor: ORANGE }]} />
+                  <View style={[styles.timelineDot, { backgroundColor: PURPLE }]} />
                   <Text style={[styles.sectionCaption, { color: theme.textDim }]}>
                     {group.label}
                   </Text>
@@ -1030,8 +1035,8 @@ function FilterChip({
       innerStyle={[
         styles.filterChip,
         {
-          backgroundColor: active ? ORANGE : 'transparent',
-          borderColor: active ? ORANGE : theme.border,
+          backgroundColor: active ? PURPLE : 'transparent',
+          borderColor: active ? PURPLE : theme.border,
         },
       ]}
       accessibilityRole="button"
@@ -1089,7 +1094,7 @@ function StatCell({
   );
 }
 
-/** Circular progress ring with an orange gradient stroke. */
+/** Circular progress ring with a purple gradient stroke. */
 function ProgressRing({ done, planned }: { done: number; planned: number }) {
   const size = 96;
   const stroke = 10;
@@ -1116,8 +1121,8 @@ function ProgressRing({ done, planned }: { done: number; planned: number }) {
       <Svg width={size} height={size}>
         <Defs>
           <LinearGradient id="todayRingGrad" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#FBBF24" />
-            <Stop offset="1" stopColor={ORANGE_DEEP} />
+            <Stop offset="0" stopColor="#A855F7" />
+            <Stop offset="1" stopColor={PURPLE_DEEP} />
           </LinearGradient>
         </Defs>
         <Circle
@@ -1237,19 +1242,12 @@ function NextUpCard({
         </View>
       )}
 
-      <View style={styles.nextVertical} pointerEvents="none">
-        <Text style={styles.nextVerticalText} numberOfLines={1}>
-          Discipline today, freedom tomorrow.
-        </Text>
-      </View>
     </View>
   );
 }
 
 interface DailyRewardStripProps {
   theme: ThemePalette;
-  /** 1-based day index into the reward ladder. */
-  currentDay: number;
   /** Claimed flags parallel to the reward-day ladder. */
   claimed: boolean[];
   /** Index of the day currently claimable. */
@@ -1260,16 +1258,19 @@ interface DailyRewardStripProps {
 }
 
 /**
- * Daily reward strip, wired to the rewards engine.
+ * Daily reward card, wired to the rewards engine.
+ * Left column: trophy icon + title + subtitle; right: chest artwork.
+ * Below: Day 1→7 connected track — tap the glowing current node to claim.
  */
 function DailyRewardStrip({
   theme,
-  currentDay: _currentDay,
   claimed,
   claimableIndex,
   claimable,
   onClaim,
 }: DailyRewardStripProps) {
+  const chest = rewardChestSource();
+  const days = claimed.map((_, i) => i + 1);
   return (
     <View
       style={[
@@ -1277,40 +1278,51 @@ function DailyRewardStrip({
         { backgroundColor: theme.surface, borderColor: theme.border },
       ]}
     >
-      <View style={styles.rewardTop}>
-        <View style={styles.rewardIconBox}>
-          <Gift color={ORANGE} size={22} strokeWidth={2.2} />
-        </View>
-        <View style={styles.rewardText}>
-          <Text style={[styles.rewardTitle, { color: theme.text }]}>Daily Reward</Text>
-          <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={2}>
+      <View style={styles.rewardHeader}>
+        <View style={styles.rewardLeft}>
+          <View style={styles.rewardIconBox}>
+            <Trophy color={PURPLE} size={24} strokeWidth={2.2} />
+          </View>
+          <Text style={[styles.rewardTitle, { color: theme.text }]}>
+            Daily Reward
+          </Text>
+          <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={3}>
             Complete today&apos;s tasks to claim your reward!
           </Text>
         </View>
+        {chest !== null && (
+          <Image
+            source={chest}
+            style={styles.rewardChest}
+            resizeMode="contain"
+            accessibilityLabel="Reward chest"
+          />
+        )}
       </View>
-      <View style={styles.rewardDays}>
-        {REWARD_DAYS.map((label, i) => {
+      <View style={styles.rewardTrack}>
+        {days.map((d, i) => {
           const isClaimed = claimed[i] === true;
           const isCurrent = i === claimableIndex && !isClaimed && claimable;
-          const isLocked = !isClaimed && !isCurrent;
           return (
-            <View key={label} style={styles.rewardDay}>
-              <RewardDayIcon
+            <View key={d} style={styles.rewardStep}>
+              {i < days.length - 1 && (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.rewardConnector,
+                    {
+                      backgroundColor: isClaimed ? PURPLE : theme.border,
+                    },
+                  ]}
+                />
+              )}
+              <RewardDayNode
                 theme={theme}
                 claimed={isClaimed}
                 current={isCurrent}
-                locked={isLocked}
+                label={`Day ${d}`}
                 onClaim={isCurrent ? onClaim : undefined}
               />
-              <Text
-                style={[
-                  styles.rewardDayLabel,
-                  { color: isClaimed || isCurrent ? theme.text : theme.textFaint },
-                ]}
-                numberOfLines={1}
-              >
-                {label}
-              </Text>
             </View>
           );
         })}
@@ -1319,17 +1331,17 @@ function DailyRewardStrip({
   );
 }
 
-function RewardDayIcon({
+function RewardDayNode({
   theme,
   claimed,
   current,
-  locked,
+  label,
   onClaim,
 }: {
   theme: ThemePalette;
   claimed: boolean;
   current: boolean;
-  locked: boolean;
+  label: string;
   onClaim?: () => void;
 }) {
   const pulse = useSharedValue(1);
@@ -1349,40 +1361,60 @@ function RewardDayIcon({
   const inner = (
     <Animated.View
       style={[
-        styles.rewardDayBox,
+        styles.rewardNode,
         {
-          backgroundColor: claimed ? ORANGE : current ? ORANGE_PALE : 'transparent',
-          borderColor: current ? ORANGE : theme.border,
-          opacity: locked ? 0.45 : 1,
+          backgroundColor: claimed
+            ? PURPLE
+            : current
+              ? PURPLE_PALE
+              : theme.surface,
+          borderColor: claimed || current ? PURPLE : theme.border,
+          borderWidth: claimed || current ? 2 : 1.5,
         },
+        current && styles.rewardNodeGlow,
         pulseStyle,
       ]}
     >
-      <Gift
-        color={claimed ? '#FFFFFF' : current ? ORANGE : theme.textFaint}
-        size={19}
-        strokeWidth={2.2}
-        fill={claimed ? '#FFFFFF' : 'none'}
-      />
+      {claimed ? (
+        <Check color="#FFFFFF" size={19} strokeWidth={2.6} />
+      ) : (
+        <Trophy
+          color={current ? PURPLE : theme.textFaint}
+          size={18}
+          strokeWidth={2.2}
+        />
+      )}
     </Animated.View>
   );
 
-  if (onClaim) {
-    return (
-      <PressableScale
-        onPress={onClaim}
-        hitSlop={HIT_SLOP}
-        accessibilityRole="button"
-        accessibilityLabel="Claim daily reward"
+  return (
+    <View style={styles.rewardNodeWrap}>
+      {onClaim ? (
+        <PressableScale
+          onPress={onClaim}
+          hitSlop={HIT_SLOP}
+          accessibilityRole="button"
+          accessibilityLabel={`Claim daily reward, ${label}`}
+        >
+          {inner}
+        </PressableScale>
+      ) : (
+        inner
+      )}
+      <Text
+        style={[
+          styles.rewardDayLabel,
+          { color: claimed || current ? theme.text : theme.textFaint },
+        ]}
+        numberOfLines={1}
       >
-        {inner}
-      </PressableScale>
-    );
-  }
-  return inner;
+        {label}
+      </Text>
+    </View>
+  );
 }
 
-/** Task row: orange left accent, checkbox, meta row, play + overflow menu. */
+/** Task row: purple left accent, checkbox, meta row, play + overflow menu. */
 function TodayTaskRow({
   item,
   theme,
@@ -1428,8 +1460,8 @@ function TodayTaskRow({
             style={[
               styles.checkCircle,
               {
-                borderColor: done ? ORANGE : theme.borderStrong,
-                backgroundColor: done ? ORANGE : 'transparent',
+                borderColor: done ? PURPLE : theme.borderStrong,
+                backgroundColor: done ? PURPLE : 'transparent',
               },
             ]}
           >
@@ -1486,7 +1518,7 @@ function TodayTaskRow({
           accessibilityRole="button"
           accessibilityLabel="Start timer"
         >
-          <Play color={ORANGE} size={17} strokeWidth={2.4} />
+          <Play color={PURPLE} size={17} strokeWidth={2.4} />
         </PressableScale>
         <PressableScale
           onPress={onMenu}
@@ -1548,7 +1580,7 @@ const styles = StyleSheet.create({
     ...type.mono,
     fontSize: 11,
     letterSpacing: 1.2,
-    color: ORANGE_SOFT,
+    color: PURPLE_SOFT,
     fontWeight: '700',
   },
   heroBottom: {
@@ -1744,7 +1776,7 @@ const styles = StyleSheet.create({
     ...type.caption,
     fontSize: 10,
     letterSpacing: 1.4,
-    color: ORANGE_SOFT,
+    color: PURPLE_SOFT,
   },
   nextTitle: {
     ...type.h2,
@@ -1809,68 +1841,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
   },
-  nextVertical: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nextVerticalText: {
-    width: 210,
-    textAlign: 'center',
-    fontSize: 11,
-    letterSpacing: 1.6,
-    color: 'rgba(249, 115, 22, 0.72)',
-    transform: [{ rotate: '90deg' }],
-  },
-
-  /* 5 — Daily Reward strip */
+  /* 5 — Daily Reward card */
   rewardCard: {
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: space(2),
     gap: space(1.75),
   },
-  rewardTop: {
+  rewardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space(1.5),
+  },
+  rewardLeft: {
+    flex: 1,
+    gap: space(1),
   },
   rewardIconBox: {
     width: 48,
     height: 48,
     borderRadius: radius.md,
-    backgroundColor: ORANGE_PALE,
+    backgroundColor: PURPLE_PALE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rewardText: {
-    flex: 1,
-    gap: 3,
+  rewardChest: {
+    width: 92,
+    height: 72,
   },
   rewardTitle: {
     ...type.bodyStrong,
     fontSize: 16,
   },
-  rewardDays: {
+  rewardTrack: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: space(0.5),
+    alignItems: 'flex-start',
+    paddingTop: space(0.5),
   },
-  rewardDay: {
+  rewardStep: {
+    flex: 1,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  rewardConnector: {
+    position: 'absolute',
+    top: 21,
+    left: '50%',
+    width: '50%',
+    height: 2,
+    borderRadius: 1,
+  },
+  rewardNodeWrap: {
     alignItems: 'center',
     gap: 5,
   },
-  rewardDayBox: {
+  rewardNode: {
     width: 44,
     height: 44,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rewardNodeGlow: {
+    shadowColor: PURPLE,
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   rewardDayLabel: {
     ...type.caption,
@@ -1977,7 +2014,7 @@ const styles = StyleSheet.create({
   taskCard: {
     borderWidth: 1,
     borderLeftWidth: 3,
-    borderLeftColor: ORANGE,
+    borderLeftColor: PURPLE,
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
@@ -2031,7 +2068,7 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   lateBadge: {
-    backgroundColor: ORANGE,
+    backgroundColor: PURPLE,
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 2,

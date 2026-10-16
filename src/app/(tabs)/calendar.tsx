@@ -49,6 +49,9 @@ import { addDays, localDateString, nowUtcIso } from '../../db/time';
 import type { LogEvent, TaskInstance, TimerSession } from '../../db/types';
 import { haptics } from '../../haptics';
 
+/** Primary accent — matches the Today page (migration from amber to purple). */
+const PURPLE = '#8B5CF6';
+
 const MONTHS = [
   'January',
   'February',
@@ -312,7 +315,7 @@ export default function CalendarScreen() {
   const cellSize = Math.max(36, Math.floor((width - gridPadding - gap * 6) / 7));
 
   function getHeatFill(done: number, total: number, isSelected: boolean): string {
-    if (isSelected) return palette.textPrimary;
+    if (isSelected) return PURPLE;
     if (total === 0 || done === 0) return palette.bgElevated;
     const ratio = done / total;
     if (theme === 'dark') {
@@ -362,6 +365,9 @@ export default function CalendarScreen() {
             <MetallicText variant="h1" palette={palette}>
               Calendar
             </MetallicText>
+            <Text style={[styles.headerSub, { color: palette.textSecondary }]}>
+              Review any day, track timers, and move tasks across the month.
+            </Text>
           </View>
 
           <View style={styles.headerActions}>
@@ -460,9 +466,7 @@ export default function CalendarScreen() {
               const isSelected = dStr === selectedDate;
               const isToday = dStr === today;
               const fill = getHeatFill(stat.done, stat.total, isSelected);
-              const textColor = isSelected
-                ? palette.textInverse
-                : palette.textPrimary;
+              const textColor = isSelected ? '#FFFFFF' : palette.textPrimary;
 
               return (
                 <PressableScale
@@ -477,7 +481,7 @@ export default function CalendarScreen() {
                       width: cellSize,
                       backgroundColor: fill,
                       borderColor: isSelected
-                        ? palette.textPrimary
+                        ? PURPLE
                         : isToday
                           ? palette.borderStrong
                           : palette.border,
@@ -490,7 +494,7 @@ export default function CalendarScreen() {
                       styles.weekDowText,
                       {
                         color: isSelected
-                          ? palette.textInverse
+                          ? '#FFFFFF'
                           : palette.textMuted,
                       },
                     ]}
@@ -511,7 +515,7 @@ export default function CalendarScreen() {
                           styles.countMicro,
                           {
                             color: isSelected
-                              ? palette.textInverse
+                              ? '#FFFFFF'
                               : palette.textSecondary,
                           },
                         ]}
@@ -525,7 +529,7 @@ export default function CalendarScreen() {
                           styles.emptyDot,
                           {
                             backgroundColor: isSelected
-                              ? palette.textInverse
+                              ? '#FFFFFF'
                               : palette.border,
                           },
                         ]}
@@ -611,9 +615,7 @@ export default function CalendarScreen() {
                       const isSelected = c.date === selectedDate;
                       const isToday = c.date === today;
                       const fill = getHeatFill(stat.done, stat.total, isSelected);
-                      const textColor = isSelected
-                        ? palette.textInverse
-                        : palette.textPrimary;
+                      const textColor = isSelected ? '#FFFFFF' : palette.textPrimary;
 
                       return (
                         <PressableScale
@@ -629,7 +631,7 @@ export default function CalendarScreen() {
                               height: cellSize,
                               backgroundColor: fill,
                               borderColor: isSelected
-                                ? palette.textPrimary
+                                ? PURPLE
                                 : isToday
                                   ? palette.borderStrong
                                   : palette.border,
@@ -650,7 +652,7 @@ export default function CalendarScreen() {
                                 styles.monthCellCount,
                                 {
                                   color: isSelected
-                                    ? palette.textInverse
+                                    ? '#FFFFFF'
                                     : palette.textSecondary,
                                 },
                               ]}
@@ -727,12 +729,12 @@ export default function CalendarScreen() {
                 style={[
                   styles.inlineAddBtn,
                   {
-                    backgroundColor: palette.textPrimary,
+                    backgroundColor: PURPLE,
                   },
                 ]}
               >
-                <Plus size={15} color={palette.textInverse} strokeWidth={2.5} />
-                <Text style={[styles.inlineAddText, { color: palette.textInverse }]}>
+                <Plus size={15} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={[styles.inlineAddText, { color: '#FFFFFF' }]}>
                   Add
                 </Text>
               </PressableScale>
@@ -753,7 +755,7 @@ export default function CalendarScreen() {
                   },
                 ]}
               >
-                <ArrowUpRight size={16} color={palette.textSecondary} />
+                <ArrowUpRight size={16} color={PURPLE} />
               </PressableScale>
             </View>
           </View>
@@ -783,8 +785,8 @@ export default function CalendarScreen() {
                   style={[
                     styles.subTabPill,
                     active && {
-                      backgroundColor: palette.bgSurface,
-                      borderColor: palette.borderStrong,
+                      backgroundColor: PURPLE,
+                      borderColor: PURPLE,
                     },
                   ]}
                 >
@@ -792,7 +794,7 @@ export default function CalendarScreen() {
                     style={[
                       styles.subTabText,
                       {
-                        color: active ? palette.textPrimary : palette.textMuted,
+                        color: active ? '#FFFFFF' : palette.textMuted,
                       },
                     ]}
                     numberOfLines={1}
@@ -1136,11 +1138,15 @@ export default function CalendarScreen() {
                     <CalendarIcon size={16} color={palette.textSecondary} />
                     <Text
                       style={[styles.moveOptionLabel, { color: palette.textPrimary }]}
+                      numberOfLines={1}
                     >
                       {opt.label}
                     </Text>
                   </View>
-                  <Text style={[styles.moveOptionDate, { color: palette.textMuted }]}>
+                  <Text
+                    style={[styles.moveOptionDate, { color: palette.textMuted }]}
+                    numberOfLines={1}
+                  >
                     {opt.sub}
                   </Text>
                 </PressableScale>
@@ -1179,6 +1185,10 @@ const styles = StyleSheet.create({
   eyebrow: {
     ...type.label,
     marginBottom: 2,
+  },
+  headerSub: {
+    ...type.caption,
+    marginTop: 4,
   },
   headerActions: {
     flexDirection: 'row',

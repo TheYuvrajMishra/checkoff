@@ -16,7 +16,7 @@ import { useDb } from '../../db/useDb';
 import { getLogEvents, logEvent } from '../../db/log';
 import { useUiStore } from '../../state/ui';
 import { useTasksStore } from '../../state/tasks';
-import { dark, hitSlop12, hitSlop8, light, Priority, radius, space, type } from '../../theme/tokens';
+import { dark, hitSlop12, hitSlop8, light, priorityRuleColor, radius, space, type } from '../../theme/tokens';
 import { PressableScale } from '../../components/PressableScale';
 import { MetallicText } from '../../components/MetallicText';
 import { Card } from '../../components/Card';
@@ -177,7 +177,6 @@ export default function DayDetailScreen() {
         <Button
           label="Add"
           size="sm"
-          palette={palette}
           icon={<Plus size={14} color={palette.textInverse} strokeWidth={2.5} />}
           onPress={() => setAddTaskOpen(true)}
         />
@@ -195,7 +194,7 @@ export default function DayDetailScreen() {
                 COMPLETION
               </Text>
               <MetallicText variant="h1" palette={palette}>
-                {doneCount}/{instances.length}
+                {`${doneCount}/${instances.length}`}
               </MetallicText>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -245,7 +244,7 @@ export default function DayDetailScreen() {
                         backgroundColor: palette.bgElevated,
                         borderColor: palette.border,
                         borderLeftColor:
-                          palette.priority[t.priority as Priority] ?? palette.border,
+                          priorityRuleColor(t.priority, palette),
                       },
                     ]}
                   >
@@ -469,7 +468,6 @@ export default function DayDetailScreen() {
       <Sheet
         visible={movingTask !== null}
         onClose={() => setMovingTask(null)}
-        palette={palette}
         title="Move Task to Day"
       >
         {movingTask ? (
@@ -537,7 +535,7 @@ const styles = StyleSheet.create({
   content: {
     padding: space.base,
     gap: space.md,
-    paddingBottom: space['3xl'],
+    paddingBottom: space.xl,
   },
   summaryRow: {
     flexDirection: 'row',
