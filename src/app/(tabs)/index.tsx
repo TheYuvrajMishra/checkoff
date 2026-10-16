@@ -3,12 +3,16 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
-import {
+import Animated, {
   createAnimatedComponent,
+  Easing,
+  FadeInDown,
+  LinearTransition,
   runOnJS,
   useAnimatedProps,
   useAnimatedReaction,
@@ -16,18 +20,40 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import { CalendarPlus, Check, Play } from 'lucide-react-native';
+import {
+  AlignLeft,
+  CalendarPlus,
+  Check,
+  Clock,
+  Play,
+  Plus,
+  Sparkles,
+} from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../../state/tasks';
 import { useUiStore } from '../../state/ui';
-import { dark, light, shadow, type, radius, space, TAP, type ThemePalette } from '../../theme/tokens';
+import {
+  dark,
+  HIT_SLOP,
+  light,
+  radius,
+  space,
+  TAP,
+  type,
+  type ThemePalette,
+} from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
+import { Button } from '../../components/Button';
+import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
-import { Fab } from '../../components/Fab';
+import { Fab, FAB_CLEARANCE } from '../../components/Fab';
+import { MetallicText } from '../../components/MetallicText';
 import { PressableScale } from '../../components/PressableScale';
+import { Sheet } from '../../components/Sheet';
 import { Skeleton } from '../../components/Skeleton';
 import { TaskActionSheet } from '../../components/TaskActionSheet';
-import { TaskRow } from '../../components/TaskRow';
-import type { TaskInstanceEx } from '../../db/repos/instances';
+import { AnimatedCheck, formatTimeDisplay, TaskRow } from '../../components/TaskRow';
+import { createInstance, type TaskInstanceEx } from '../../db/repos/instances';
+import { createTemplate } from '../../db/repos/templates';
 import {
   addDays,
   localDateString,
@@ -39,14 +65,14 @@ import { getLogEvents } from '../../db/log';
 import { lastPracticedAt, listSkills } from '../../db/repos/skills';
 import { listCategories } from '../../db/repos/categories';
 import { haptics } from '../../haptics';
-import type { Skill, TaskInstance } from '../../db/types';
+import type { Category, Priority, Skill, TaskInstance } from '../../db/types';
 
 const AnimatedCircle = createAnimatedComponent(Circle);
 
 const DATE_FMT: Intl.DateTimeFormatOptions = {
-  weekday: 'long',
+  weekday: 'short',
   day: 'numeric',
-  month: 'long',
+  month: 'short',
   year: 'numeric',
 };
 
@@ -69,30 +95,21 @@ function daysAgoLabel(lastTs: string | null, today: string): string {
   );
   if (diff <= 0) return 'Practiced today';
   if (diff === 1) return 'Practiced yesterday';
-  return `Practiced ${diff} days ago`;
+  return `Practiced ${diff}d ago`;
 }
 
-/** "18:30" -> "6:30 PM". */
-function formatAlarm12h(hhmm: string): string {
-  const [h, m] = hhmm.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-}
-
-/** Live countdown label from now to an "HH:MM" alarm today. */
 function countdownLabel(now: Date, alarmTime: string | null): string {
-  if (!alarmTime) return 'Up next';
+  if (!alarmTime) return 'UP NEXT';
   const [h, m] = alarmTime.split(':').map(Number);
   const target = new Date(now);
   target.setHours(h, m, 0, 0);
   const diffMs = target.getTime() - now.getTime();
-  if (diffMs <= 0) return 'Due now';
+  if (diffMs <= 0) return 'DUE NOW';
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return `in ${mins}m`;
+  if (mins < 60) return `IN ${mins}M`;
   const hrs = Math.floor(mins / 60);
   const rem = mins % 60;
-  return rem === 0 ? `in ${hrs}h` : `in ${hrs}h ${rem}m`;
+  return rem === 0 ? `IN ${hrs}H` : `IN ${hrs}H ${rem}M`;
 }
 
 interface OnTimeStats {
@@ -105,6 +122,7 @@ export default function TodayScreen() {
   const db = useTasksDb();
   const theme = useUiStore((s) => (s.theme === 'light' ? light : dark));
   const graceMin = useUiStore((s) => s.graceMin);
+  const clockFormat = useUiStore((s) => s.clockFormat);
   const date = useTasksStore((s) => s.date);
   const instances = useTasksStore((s) => s.instances);
   const loading = useTasksStore((s) => s.loading);
@@ -118,7 +136,7 @@ export default function TodayScreen() {
   const [slotLastTs, setSlotLastTs] = useState<string | null>(null);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideSkills, setOverrideSkills] = useState<Skill[]>([]);
-  const [catTokens, setCatTokens] = useState<Map<string, string>>(new Map());
+  const [categories, setCategories] = useState<Category[]>([]);
   const [onTime, setOnTime] = useState<OnTimeStats>({ done: 0, planned: 0, onTimePct: null });
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [menuInstance, setMenuInstance] = useState<TaskInstance | null>(null);
@@ -126,11 +144,24 @@ export default function TodayScreen() {
   const [editingInstance, setEditingInstance] = useState<TaskInstanceEx | null>(null);
   const [editSheetOpen, setEditSheetOpen] = useState(false);
 
-  // Live clock.
+  // View mode & filters
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [filterCatId, setFilterCatId] = useState<string | null>(null);
+  const [filterPriority, setFilterPriority] = useState<Priority | null>(null);
+
+  // Quick add
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const catMap = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories]
+  );
 
   const syncDay = useCallback(
     async (target?: string) => {
@@ -144,7 +175,7 @@ export default function TodayScreen() {
         setSlot(s);
         setSlotLastTs(s.skill ? await lastPracticedAt(db, s.skill.id) : null);
         const cats = await listCategories(db);
-        setCatTokens(new Map(cats.map((c) => [c.id, c.colorToken])));
+        setCategories(cats);
       } catch (e) {
         console.error('[today] sync failed', e);
       }
@@ -159,14 +190,12 @@ export default function TodayScreen() {
     [syncDay]
   );
 
-  // Recompute on-time stats from the store's instances.
   useFocusEffect(
     useCallback(() => {
       void syncDay();
     }, [syncDay])
   );
 
-  // Recompute stats when instances change.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -212,7 +241,8 @@ export default function TodayScreen() {
     };
   }, [db, date, instances, graceMin]);
 
-  const openOverridePicker = useCallback(async () => {    if (!slot?.category) return;
+  const openOverridePicker = useCallback(async () => {
+    if (!slot?.category) return;
     try {
       const all = await listSkills(db, slot.category.id);
       setOverrideSkills(all);
@@ -237,14 +267,60 @@ export default function TodayScreen() {
     [db, date]
   );
 
+  const handleQuickAdd = useCallback(async () => {
+    const clean = quickTitle.trim();
+    if (!clean || quickBusy) return;
+    setQuickBusy(true);
+    try {
+      void haptics.check();
+      const catId = filterCatId ?? categories[0]?.id ?? null;
+      const prio: Priority = filterPriority ?? 'medium';
+      const tpl = await createTemplate(db, {
+        title: clean,
+        categoryId: catId,
+        durationMin: 30,
+        recurrence: 'once',
+        customDays: [],
+        targetDate: date,
+        alarmTime: null,
+        isRitual: false,
+        priority: prio,
+      });
+      await createInstance(db, {
+        templateId: tpl.id,
+        date,
+        title: clean,
+        categoryId: catId,
+        durationMin: 30,
+        alarmTime: null,
+        isRitual: false,
+        priority: prio,
+      });
+      setQuickTitle('');
+      await refresh(date);
+    } catch (e) {
+      console.error('[today] quick add failed', e);
+    } finally {
+      setQuickBusy(false);
+    }
+  }, [quickTitle, quickBusy, filterCatId, filterPriority, categories, db, date, refresh]);
+
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, k) => addDays(date, k - 3)),
     [date]
   );
 
-  const rituals = instances.filter((i) => i.isRitual);
+  const rituals = useMemo(() => instances.filter((i) => i.isRitual), [instances]);
+  const allTasks = useMemo(() => instances.filter((i) => !i.isRitual), [instances]);
 
-  /** Haptic vocabulary, applied at the interaction site (never inside the store). */
+  const filteredTasks = useMemo(() => {
+    return allTasks.filter((t) => {
+      if (filterCatId && t.categoryId !== filterCatId) return false;
+      if (filterPriority && (t.priority ?? 'medium') !== filterPriority) return false;
+      return true;
+    });
+  }, [allTasks, filterCatId, filterPriority]);
+
   const handleToggle = useCallback(
     async (item: TaskInstance) => {
       const willComplete = item.status !== 'done';
@@ -258,11 +334,10 @@ export default function TodayScreen() {
           if (remaining === 0) await haptics.finalRitual();
           else await haptics.check();
         } else {
-          // Phase 4: a finished task celebrates with a Success notification.
           await haptics.complete();
         }
       } catch {
-        /* haptics never throws by contract */
+        /* ignore */
       }
       await toggleDone(item.id);
     },
@@ -274,21 +349,19 @@ export default function TodayScreen() {
       try {
         await haptics.skip();
       } catch {
-        /* haptics never throws by contract */
+        /* ignore */
       }
       await skipTask(id);
     },
     [skipTask]
   );
-  const tasks = instances.filter((i) => !i.isRitual);
 
   const nowHHMM = localTimeString(now);
   const todayStr = localDateString();
-  const pendingTasks = tasks.filter((t) => t.status === 'pending');
+  const pendingTasks = allTasks.filter((t) => t.status === 'pending');
   const nextUp =
     pendingTasks.find((t) => t.alarmTime && t.alarmTime >= nowHHMM) ?? pendingTasks[0] ?? null;
 
-  /** Overdue: pending, scheduled for today, alarm time already passed. */
   const isOverdue = useCallback(
     (t: TaskInstance) =>
       t.status === 'pending' &&
@@ -310,8 +383,6 @@ export default function TodayScreen() {
 
   const handleEdit = useCallback((item: TaskInstance) => {
     setMenuInstance(null);
-    // The store holds plain TaskInstance rows; AddTaskSheet needs the Ex
-    // subtype for prefill. The extra fields are absent here, so build it.
     setEditingInstance({ ...item, skillId: null } as TaskInstanceEx);
     setEditSheetOpen(true);
   }, []);
@@ -319,29 +390,75 @@ export default function TodayScreen() {
   const showNextCard = date === todayStr && nextUp !== null;
   const statusLine =
     onTime.planned === 0
-      ? 'Nothing scheduled today'
+      ? 'No tasks scheduled today'
       : `${onTime.done} of ${onTime.planned} done${
-          nextUp?.alarmTime ? `, next at ${formatAlarm12h(nextUp.alarmTime)}` : ''
+          nextUp?.alarmTime
+            ? `, next at ${formatTimeDisplay(nextUp.alarmTime, clockFormat)}`
+            : ''
         }`;
 
-  return (
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero: live clock + day-progress arc + status */}
-        <DayHero theme={theme} now={now} statusLine={statusLine} />
+  // Group tasks for timeline view
+  const timelineGroups = useMemo(() => {
+    const morning: TaskInstance[] = [];
+    const afternoon: TaskInstance[] = [];
+    const evening: TaskInstance[] = [];
+    const anytime: TaskInstance[] = [];
+    for (const t of filteredTasks) {
+      if (!t.alarmTime) {
+        anytime.push(t);
+        continue;
+      }
+      const hr = Number(t.alarmTime.split(':')[0]);
+      if (hr < 12) morning.push(t);
+      else if (hr < 17) afternoon.push(t);
+      else evening.push(t);
+    }
+    return [
+      { label: 'MORNING · 00:00–11:59', items: morning },
+      { label: 'AFTERNOON · 12:00–16:59', items: afternoon },
+      { label: 'EVENING · 17:00–23:59', items: evening },
+      { label: 'UNSCHEDULED', items: anytime },
+    ].filter((g) => g.items.length > 0);
+  }, [filteredTasks]);
 
-        {/* Week strip */}
+  const ritualsDone = rituals.filter((r) => r.status === 'done').length;
+
+  return (
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]} edges={['top']}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: FAB_CLEARANCE }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Hero: Metallic live clock + thin day-progress arc + status */}
+        <DayHero
+          theme={theme}
+          now={now}
+          clockFormat={clockFormat}
+          statusLine={statusLine}
+        />
+
+        {/* 7-day week strip */}
         <View style={styles.weekRow}>
           {weekDays.map((d) => {
             const selected = d === date;
+            const isToday = d === todayStr;
             return (
               <PressableScale
                 key={d}
                 onPress={() => setDate(d)}
                 hitSlop={4}
-                style={[
+                style={styles.dayCellWrap}
+                innerStyle={[
                   styles.dayCell,
-                  selected && { backgroundColor: theme.accent },
+                  {
+                    backgroundColor: selected ? theme.accent : theme.surface,
+                    borderColor: selected
+                      ? theme.accent
+                      : isToday
+                      ? theme.borderStrong
+                      : theme.border,
+                  },
                 ]}
               >
                 <Text
@@ -349,6 +466,8 @@ export default function TodayScreen() {
                     styles.dayDow,
                     { color: selected ? theme.onAccent : theme.textFaint },
                   ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                 >
                   {weekdayShort(d)}
                 </Text>
@@ -357,6 +476,7 @@ export default function TodayScreen() {
                     styles.dayNum,
                     { color: selected ? theme.onAccent : theme.text },
                   ]}
+                  numberOfLines={1}
                 >
                   {dayNum(d)}
                 </Text>
@@ -365,27 +485,32 @@ export default function TodayScreen() {
           })}
         </View>
 
-        {/* Progress ring */}
-        <View style={[styles.card, shadow.sm, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <ProgressRing theme={theme} done={onTime.done} planned={onTime.planned} />
-          <View style={styles.progressText}>
-            <Text style={[styles.caption, { color: theme.textFaint }]}>TODAY&apos;S PROGRESS</Text>
-            <Text style={[styles.h3, { color: theme.text }]}>
-              {onTime.done} of {onTime.planned} done
-            </Text>
-            <Text style={[styles.small, { color: theme.textDim }]}>
-              {onTime.onTimePct === null
-                ? 'No timed completions yet'
-                : `${onTime.onTimePct}% on-time`}
-            </Text>
+        {/* Progress Ring Card */}
+        <Card padding={2} style={styles.progressCard}>
+          <View style={styles.progressRow}>
+            <ProgressRing theme={theme} done={onTime.done} planned={onTime.planned} />
+            <View style={styles.progressText}>
+              <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
+                TODAY&apos;S PROGRESS
+              </Text>
+              <MetallicText style={styles.progressHeading} numberOfLines={1}>
+                {`${onTime.done} of ${onTime.planned} done`}
+              </MetallicText>
+              <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={1}>
+                {onTime.onTimePct === null
+                  ? 'Complete scheduled tasks to track on-time rate'
+                  : `${onTime.onTimePct}% completed within ${graceMin}m grace`}
+              </Text>
+            </View>
           </View>
-        </View>
+        </Card>
 
         {/* Next-up card */}
         {showNextCard && (
           <NextUpCard
             theme={theme}
             item={nextUp}
+            clockFormat={clockFormat}
             countdown={countdownLabel(now, nextUp.alarmTime)}
             onStart={() =>
               router.push({ pathname: '/timer', params: { instanceId: nextUp.id } })
@@ -394,110 +519,315 @@ export default function TodayScreen() {
           />
         )}
 
-        {/* Rituals */}
+        {/* Morning Rituals block */}
         {rituals.length > 0 && (
-          <View>
-            <Text style={[styles.caption, { color: theme.textFaint }]}>RITUALS</Text>
-            {rituals.map((r) => (
-              <RitualRow key={r.id} item={r} theme={theme} onToggle={() => handleToggle(r)} />
-            ))}
-          </View>
+          <Card padding={2} elevated>
+            <View style={styles.blockHeader}>
+              <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
+                MORNING RITUALS
+              </Text>
+              <Text style={[styles.monoBadge, { color: theme.textDim }]}>
+                {ritualsDone}/{rituals.length}
+              </Text>
+            </View>
+            <View style={styles.ritualList}>
+              {rituals.map((r, idx) => (
+                <RitualRow
+                  key={r.id}
+                  item={r}
+                  theme={theme}
+                  isLast={idx === rituals.length - 1}
+                  onToggle={() => handleToggle(r)}
+                />
+              ))}
+            </View>
+          </Card>
         )}
 
-        {/* Tasks */}
-        <Text style={[styles.caption, { color: theme.textFaint }]}>TASKS</Text>
-        {loading ? (
-          <>
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height={76} />
-            ))}
-          </>
-        ) : tasks.length === 0 && rituals.length === 0 ? (
-          <EmptyState
-            icon={CalendarPlus}
-            title="No tasks yet"
-            subtitle="Nothing scheduled for this day. Add your first task to get started."
-            actionLabel="Add your first task"
-            onAction={() => setAddSheetOpen(true)}
-          />
-        ) : (
-          tasks.map((t) => (
-            <TaskRow
-              key={t.id}
-              item={t}
-              theme={theme}
-              categoryToken={t.categoryId ? catTokens.get(t.categoryId) : undefined}
-              isNext={nextUp?.id === t.id}
-              overdue={isOverdue(t)}
-              onToggle={() => handleToggle(t)}
-              onSkip={() => handleSkip(t.id)}
-              onReschedule={() => openReschedule(t)}
-              onLongPress={() => openMenu(t)}
-            />
-          ))
-        )}
-
-        {/* Skill slot */}
+        {/* Today's Creative Skill Slot */}
         {slot && (slot.skill || slot.category) && (
-          <View>
-            <Text style={[styles.caption, { color: theme.textFaint }]}>TODAY&apos;S SKILL</Text>
-            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <View style={styles.slotHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.h3, { color: theme.text }]}>
-                    {slot.skill ? slot.skill.name : 'No skills yet'}
-                  </Text>
-                  <Text style={[styles.small, { color: theme.textDim }]}>
-                    {slot.category ? slot.category.name : ''}
-                    {slot.skill ? ` · ${daysAgoLabel(slotLastTs, date)}` : ''}
-                    {slot.overridden ? ' · overridden' : ''}
+          <Card padding={2} leftRuleColor={theme.accent}>
+            <View style={styles.slotHeader}>
+              <View style={styles.slotInfo}>
+                <View style={styles.slotTitleRow}>
+                  <Sparkles color={theme.textDim} size={13} strokeWidth={2} />
+                  <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
+                    CREATIVE SKILL SLOT
                   </Text>
                 </View>
-                <PressableScale
-                  onPress={openOverridePicker}
-                  style={[styles.slotBtn, { borderColor: theme.border }]}
-                >
-                  <Text style={[styles.small, { color: theme.text }]}>Change</Text>
-                </PressableScale>
+                <MetallicText style={styles.slotName} numberOfLines={1}>
+                  {slot.skill ? slot.skill.name : 'No skill configured'}
+                </MetallicText>
+                <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={1}>
+                  {slot.category ? slot.category.name : 'General'}
+                  {slot.skill ? ` · ${daysAgoLabel(slotLastTs, date)}` : ''}
+                  {slot.overridden ? ' · Overridden' : ''}
+                </Text>
               </View>
-              {slot.skill && (
-                <PressableScale
+              <Button
+                label="Change"
+                variant="secondary"
+                size="sm"
+                onPress={openOverridePicker}
+              />
+            </View>
+            {slot.skill && (
+              <View style={{ marginTop: space(1.5) }}>
+                <Button
+                  label="Start Focus Session"
+                  variant="primary"
+                  fullWidth
+                  icon={<Play color={theme.onAccent} size={15} strokeWidth={2.4} />}
                   onPress={() =>
                     router.push({
                       pathname: '/timer',
                       params: { instanceId: '', skillId: slot.skill!.id },
                     })
                   }
-                  style={[styles.startBtn, { backgroundColor: theme.accent }]}
-                >
-                  <Text style={[styles.startBtnText, { color: theme.onAccent }]}>
-                    Start timer
-                  </Text>
-                </PressableScale>
-              )}
-            </View>
-          </View>
+                />
+              </View>
+            )}
+          </Card>
         )}
 
-        {overrideOpen && (
-          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.caption, { color: theme.textFaint }]}>PICK A SKILL</Text>
-            {overrideSkills.map((s) => (
-              <PressableScale
-                key={s.id}
-                onPress={() => applyOverride(s.id)}
-                style={styles.overrideRow}
+        {/* Quick-Add bar */}
+        <View
+          style={[
+            styles.quickAddWrap,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
+          <TextInput
+            value={quickTitle}
+            onChangeText={setQuickTitle}
+            placeholder="Quick-add task for this day…"
+            placeholderTextColor={theme.textFaint}
+            returnKeyType="done"
+            onSubmitEditing={handleQuickAdd}
+            style={[styles.quickInput, { color: theme.text }]}
+          />
+          <PressableScale
+            onPress={handleQuickAdd}
+            disabled={!quickTitle.trim() || quickBusy}
+            style={styles.quickBtn}
+            innerStyle={[
+              styles.quickBtnInner,
+              {
+                backgroundColor: quickTitle.trim() ? theme.accent : theme.surface2,
+                borderColor: theme.border,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Quick add task"
+          >
+            <Plus
+              color={quickTitle.trim() ? theme.onAccent : theme.textFaint}
+              size={18}
+              strokeWidth={2.5}
+            />
+          </PressableScale>
+        </View>
+
+        {/* Tasks Header + List/Timeline Toggle */}
+        <View style={styles.tasksHeader}>
+          <MetallicText style={styles.sectionTitle}>SCHEDULE</MetallicText>
+          <View
+            style={[
+              styles.viewToggle,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <PressableScale
+              onPress={() => setViewMode('list')}
+              hitSlop={4}
+              style={styles.toggleItem}
+              innerStyle={[
+                styles.toggleInner,
+                viewMode === 'list' && { backgroundColor: theme.accent },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="List view"
+            >
+              <AlignLeft
+                color={viewMode === 'list' ? theme.onAccent : theme.textDim}
+                size={14}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: viewMode === 'list' ? theme.onAccent : theme.textDim },
+                ]}
               >
-                <Text style={[styles.body, { color: theme.text }]}>{s.name}</Text>
-              </PressableScale>
-            ))}
-            <PressableScale onPress={() => setOverrideOpen(false)} style={styles.overrideRow}>
-              <Text style={[styles.body, { color: theme.textFaint }]}>Cancel</Text>
+                List
+              </Text>
             </PressableScale>
+            <PressableScale
+              onPress={() => setViewMode('timeline')}
+              hitSlop={4}
+              style={styles.toggleItem}
+              innerStyle={[
+                styles.toggleInner,
+                viewMode === 'timeline' && { backgroundColor: theme.accent },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Timeline view"
+            >
+              <Clock
+                color={viewMode === 'timeline' ? theme.onAccent : theme.textDim}
+                size={14}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: viewMode === 'timeline' ? theme.onAccent : theme.textDim },
+                ]}
+              >
+                Timeline
+              </Text>
+            </PressableScale>
+          </View>
+        </View>
+
+        {/* Category & Priority Filters */}
+        {allTasks.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            <FilterChip
+              label="All"
+              active={filterCatId === null && filterPriority === null}
+              theme={theme}
+              onPress={() => {
+                setFilterCatId(null);
+                setFilterPriority(null);
+              }}
+            />
+            {(['high', 'medium', 'low'] as Priority[]).map((p) => (
+              <FilterChip
+                key={p}
+                label={p === 'high' ? 'High Prio' : p === 'medium' ? 'Med Prio' : 'Low Prio'}
+                active={filterPriority === p}
+                theme={theme}
+                onPress={() => setFilterPriority(filterPriority === p ? null : p)}
+              />
+            ))}
+            {categories.map((c) => (
+              <FilterChip
+                key={c.id}
+                label={c.name}
+                active={filterCatId === c.id}
+                theme={theme}
+                onPress={() => setFilterCatId(filterCatId === c.id ? null : c.id)}
+              />
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Task List or Timeline */}
+        {loading ? (
+          <View style={{ gap: space(1.25) }}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={76} />
+            ))}
+          </View>
+        ) : filteredTasks.length === 0 ? (
+          <EmptyState
+            icon={CalendarPlus}
+            title={allTasks.length === 0 ? 'No tasks scheduled' : 'No matching tasks'}
+            subtitle={
+              allTasks.length === 0
+                ? 'Start building your day with a timed task or morning ritual.'
+                : 'Clear your active category or priority filter to see all tasks.'
+            }
+            actionLabel={allTasks.length === 0 ? 'New Task' : 'Reset Filters'}
+            onAction={() => {
+              if (allTasks.length === 0) setAddSheetOpen(true);
+              else {
+                setFilterCatId(null);
+                setFilterPriority(null);
+              }
+            }}
+          />
+        ) : viewMode === 'list' ? (
+          <View style={styles.taskList}>
+            {filteredTasks.map((t, index) => {
+              const cat = t.categoryId ? catMap.get(t.categoryId) : undefined;
+              return (
+                <Animated.View
+                  key={t.id}
+                  entering={FadeInDown.duration(180).delay(Math.min(index * 30, 180))}
+                  layout={LinearTransition.duration(180)}
+                >
+                  <TaskRow
+                    item={t}
+                    theme={theme}
+                    categoryToken={cat?.colorToken}
+                    categoryName={cat?.name}
+                    clockFormat={clockFormat}
+                    isNext={nextUp?.id === t.id}
+                    overdue={isOverdue(t)}
+                    onToggle={() => handleToggle(t)}
+                    onSkip={() => handleSkip(t.id)}
+                    onReschedule={() => openReschedule(t)}
+                    onLongPress={() => openMenu(t)}
+                    onStartTimer={() =>
+                      router.push({ pathname: '/timer', params: { instanceId: t.id } })
+                    }
+                  />
+                </Animated.View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.timelineWrap}>
+            {timelineGroups.map((group) => (
+              <View key={group.label} style={styles.timelineBlock}>
+                <View style={styles.timelineHeader}>
+                  <View style={[styles.timelineDot, { backgroundColor: theme.accent }]} />
+                  <Text style={[styles.sectionCaption, { color: theme.textDim }]}>
+                    {group.label}
+                  </Text>
+                </View>
+                <View style={[styles.timelineRail, { borderLeftColor: theme.borderStrong }]}>
+                  {group.items.map((t) => {
+                    const cat = t.categoryId ? catMap.get(t.categoryId) : undefined;
+                    return (
+                      <Animated.View
+                        key={t.id}
+                        layout={LinearTransition.duration(180)}
+                      >
+                        <TaskRow
+                          item={t}
+                          theme={theme}
+                          categoryToken={cat?.colorToken}
+                          categoryName={cat?.name}
+                          clockFormat={clockFormat}
+                          isNext={nextUp?.id === t.id}
+                          overdue={isOverdue(t)}
+                          onToggle={() => handleToggle(t)}
+                          onSkip={() => handleSkip(t.id)}
+                          onReschedule={() => openReschedule(t)}
+                          onLongPress={() => openMenu(t)}
+                          onStartTimer={() =>
+                            router.push({ pathname: '/timer', params: { instanceId: t.id } })
+                          }
+                        />
+                      </Animated.View>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
+
       <Fab onPress={() => setAddSheetOpen(true)} />
+
       <AddTaskSheet
         visible={addSheetOpen}
         onClose={() => setAddSheetOpen(false)}
@@ -522,77 +852,142 @@ export default function TodayScreen() {
         onClose={() => setMenuInstance(null)}
         onEdit={handleEdit}
       />
+
+      <Sheet
+        visible={overrideOpen}
+        onClose={() => setOverrideOpen(false)}
+        title="Select Today's Skill"
+      >
+        <View style={{ gap: space(1), paddingTop: space(1) }}>
+          {overrideSkills.map((s) => (
+            <PressableScale
+              key={s.id}
+              onPress={() => applyOverride(s.id)}
+              style={styles.overrideRow}
+              innerStyle={[
+                styles.overrideRowInner,
+                {
+                  backgroundColor:
+                    slot?.skill?.id === s.id ? theme.surface3 : theme.surface2,
+                  borderColor:
+                    slot?.skill?.id === s.id ? theme.borderStrong : theme.border,
+                },
+              ]}
+            >
+              <Text style={[styles.body, { color: theme.text }]}>{s.name}</Text>
+              {slot?.skill?.id === s.id && (
+                <Check color={theme.text} size={18} strokeWidth={2.5} />
+              )}
+            </PressableScale>
+          ))}
+        </View>
+      </Sheet>
     </SafeAreaView>
   );
 }
 
-/**
- * Hero: large live clock wrapped in a thin day-progress arc (SVG),
- * date beneath, and a one-line status.
- */
+function FilterChip({
+  label,
+  active,
+  theme,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  theme: ThemePalette;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      hitSlop={4}
+      innerStyle={[
+        styles.filterChip,
+        {
+          backgroundColor: active ? theme.accent : theme.surface,
+          borderColor: active ? theme.accent : theme.border,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.filterChipText,
+          { color: active ? theme.onAccent : theme.textDim },
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </PressableScale>
+  );
+}
+
 function DayHero({
   theme,
   now,
+  clockFormat,
   statusLine,
 }: {
   theme: ThemePalette;
   now: Date;
+  clockFormat: '12h' | '24h';
   statusLine: string;
 }) {
-  const size = 260;
-  const stroke = 3;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
   const dayFrac = Math.min(1, Math.max(0, (now.getTime() - startOfDay.getTime()) / 86400000));
+  const dayPct = Math.round(dayFrac * 100);
+
+  const timeStr = now.toLocaleTimeString('en-GB', {
+    hour12: clockFormat === '12h',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 
   return (
-    <View style={styles.hero}>
-      <View style={[styles.heroRing, { width: size, height: size }]}>
-        <Svg width={size} height={size}>
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            stroke={theme.border}
-            strokeWidth={stroke}
-            fill="none"
-            opacity={0.7}
-          />
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            stroke={theme.accent}
-            strokeWidth={stroke}
-            fill="none"
-            strokeDasharray={`${c}`}
-            strokeDashoffset={c * (1 - dayFrac)}
-            strokeLinecap="round"
-            transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          />
-        </Svg>
-        <View style={styles.heroCenter}>
-          <Text style={[styles.heroClock, { color: theme.text }]}>
-            {now.toLocaleTimeString('en-GB', { hour12: false })}
-          </Text>
-          <Text style={[styles.small, { color: theme.textDim, textAlign: 'center' }]}>
-            {now.toLocaleDateString('en-GB', DATE_FMT)}
-          </Text>
-        </View>
+    <Card padding={2.5} elevated>
+      <View style={styles.heroTopRow}>
+        <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
+          {now.toLocaleDateString('en-GB', DATE_FMT).toUpperCase()}
+        </Text>
+        <Text style={[styles.monoSmall, { color: theme.textDim }]}>
+          DAY {dayPct}%
+        </Text>
       </View>
-      <Text style={[styles.body, { color: theme.textDim, textAlign: 'center' }]} numberOfLines={1}>
+
+      <MetallicText
+        style={styles.heroClock}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {timeStr}
+      </MetallicText>
+
+      {/* Thin day-progress bar */}
+      <View style={[styles.dayBarTrack, { backgroundColor: theme.surface3 }]}>
+        <View
+          style={[
+            styles.dayBarFill,
+            {
+              width: `${Math.max(2, dayPct)}%`,
+              backgroundColor: theme.accent,
+            },
+          ]}
+        />
+      </View>
+
+      <Text
+        style={[styles.statusLine, { color: theme.textDim }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {statusLine}
       </Text>
-    </View>
+    </Card>
   );
 }
 
-/**
- * Big progress ring: animated fill on the UI thread, center number counts
- * up, subtle glow disc on 100% completion.
- */
 function ProgressRing({
   theme,
   done,
@@ -602,18 +997,20 @@ function ProgressRing({
   done: number;
   planned: number;
 }) {
-  const size = 120;
-  const stroke = 10;
+  const size = 96;
+  const stroke = 7;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const frac = planned > 0 ? done / planned : 0;
-  const complete = planned > 0 && frac >= 1;
 
   const progress = useSharedValue(0);
   const [displayDone, setDisplayDone] = useState(0);
 
   useEffect(() => {
-    progress.value = withTiming(frac, { duration: 700 });
+    progress.value = withTiming(frac, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [frac, progress]);
 
   useAnimatedReaction(
@@ -635,21 +1032,10 @@ function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={theme.border}
+          stroke={theme.surface3}
           strokeWidth={stroke}
           fill="none"
         />
-        {complete && (
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            stroke={theme.accent}
-            strokeWidth={stroke + 10}
-            fill="none"
-            opacity={0.18}
-          />
-        )}
         <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
@@ -664,122 +1050,116 @@ function ProgressRing({
         />
       </Svg>
       <View style={styles.ringCenter}>
-        <Text style={[styles.ringNumber, { color: theme.text }]}>{displayDone}</Text>
-        <Text style={[styles.caption, { color: theme.textFaint }]}>OF {planned}</Text>
+        <MetallicText style={styles.ringNumber}>{`${displayDone}`}</MetallicText>
+        <Text style={[styles.ringSub, { color: theme.textFaint }]}>/{planned}</Text>
       </View>
     </View>
   );
 }
 
-/**
- * Next-up card: elevated above the list, live countdown, Start / Done.
- */
 function NextUpCard({
   theme,
   item,
+  clockFormat,
   countdown,
   onStart,
   onDone,
 }: {
   theme: ThemePalette;
   item: TaskInstance;
+  clockFormat: '12h' | '24h';
   countdown: string;
   onStart: () => void;
   onDone: () => void;
 }) {
   return (
-    <View
-      style={[
-        styles.nextCard,
-        shadow.md,
-        { backgroundColor: theme.surface, borderColor: theme.border },
-      ]}
-    >
-      <View style={[styles.nextCardBar, { backgroundColor: theme.accent }]} />
-      <View style={styles.nextCardBody}>
-        <View style={styles.nextCardTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.caption, { color: theme.accent }]}>NEXT UP</Text>
-            <Text style={[styles.h2, { color: theme.text }]} numberOfLines={2}>
-              {item.title}
-            </Text>
+    <Card padding={2} elevated leftRuleColor={theme.accent}>
+      <View style={styles.nextCardTop}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <View style={styles.nextHeaderLine}>
+            <Text style={[styles.sectionCaption, { color: theme.text }]}>NEXT UP</Text>
+            {item.alarmTime && (
+              <Text style={[styles.monoSmall, { color: theme.textDim }]}>
+                · {formatTimeDisplay(item.alarmTime, clockFormat)}
+              </Text>
+            )}
           </View>
-          <View style={[styles.countdownPill, { backgroundColor: theme.accentDim }]}>
-            <Text style={[styles.mono, { color: theme.accent }]}>{countdown}</Text>
-          </View>
+          <Text style={[styles.h2, { color: theme.text }]} numberOfLines={2}>
+            {item.title}
+          </Text>
         </View>
-        <View style={styles.nextCardActions}>
-          <PressableScale
-            onPress={onStart}
-            style={[styles.nextAction, { backgroundColor: theme.accent }]}
-            accessibilityRole="button"
-            accessibilityLabel="Start timer"
-          >
-            <Play color={theme.onAccent} size={16} strokeWidth={2.5} />
-            <Text style={[styles.nextActionText, { color: theme.onAccent }]}>Start</Text>
-          </PressableScale>
-          <PressableScale
-            onPress={onDone}
-            style={[styles.nextAction, styles.nextActionOutline, { borderColor: theme.border }]}
-            accessibilityRole="button"
-            accessibilityLabel="Mark done"
-          >
-            <Check color={theme.text} size={16} strokeWidth={2.5} />
-            <Text style={[styles.nextActionText, { color: theme.text }]}>Done</Text>
-          </PressableScale>
+        <View
+          style={[
+            styles.countdownPill,
+            { backgroundColor: theme.surface3, borderColor: theme.borderStrong },
+          ]}
+        >
+          <Text style={[styles.monoSmall, { color: theme.text }]}>{countdown}</Text>
         </View>
       </View>
-    </View>
-  );
-}
-
-function CheckCircle({
-  checked,
-  theme,
-}: {
-  checked: boolean;
-  theme: ThemePalette;
-}) {
-  return (
-    <View
-      style={[
-        styles.check,
-        {
-          borderColor: checked ? theme.accent : theme.textFaint,
-          backgroundColor: checked ? theme.accent : 'transparent',
-        },
-      ]}
-    >
-      {checked && <Check color={theme.onAccent} size={20} strokeWidth={3} />}
-    </View>
+      <View style={styles.nextCardActions}>
+        <View style={{ flex: 1 }}>
+          <Button
+            label="Start Timer"
+            variant="primary"
+            fullWidth
+            icon={<Play color={theme.onAccent} size={15} strokeWidth={2.5} />}
+            onPress={onStart}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button
+            label="Mark Done"
+            variant="secondary"
+            fullWidth
+            icon={<Check color={theme.text} size={15} strokeWidth={2.5} />}
+            onPress={onDone}
+          />
+        </View>
+      </View>
+    </Card>
   );
 }
 
 function RitualRow({
   item,
   theme,
+  isLast,
   onToggle,
 }: {
   item: TaskInstance;
   theme: ThemePalette;
+  isLast: boolean;
   onToggle: () => void;
 }) {
+  const done = item.status === 'done';
   return (
     <PressableScale
       onPress={onToggle}
-      style={[styles.ritualRow, { borderColor: theme.border }]}
+      hitSlop={HIT_SLOP}
+      innerStyle={[
+        styles.ritualRow,
+        !isLast && { borderBottomWidth: 1, borderBottomColor: theme.border },
+      ]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: done }}
     >
-      <CheckCircle checked={item.status === 'done'} theme={theme} />
+      <AnimatedCheck checked={done} theme={theme} />
       <Text
         style={[
           styles.body,
           {
-            color: item.status === 'done' ? theme.textFaint : theme.text,
-            textDecorationLine: item.status === 'done' ? 'line-through' : 'none',
+            flex: 1,
+            color: done ? theme.textFaint : theme.text,
+            textDecorationLine: done ? 'line-through' : 'none',
           },
         ]}
+        numberOfLines={1}
       >
         {item.title}
+      </Text>
+      <Text style={[styles.monoSmall, { color: theme.textFaint }]}>
+        {item.durationMin}m
       </Text>
     </PressableScale>
   );
@@ -787,118 +1167,276 @@ function RitualRow({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  // Clears the floating glass tab bar + FAB.
-  scroll: { padding: space(2), gap: space(2), paddingBottom: 128 },
-  hero: { alignItems: 'center', gap: space(1.5), paddingTop: space(1) },
-  heroRing: { alignItems: 'center', justifyContent: 'center' },
-  heroCenter: {
-    ...StyleSheet.absoluteFill,
+  scroll: {
+    paddingHorizontal: space(2),
+    paddingTop: space(1),
+    gap: space(2),
+  },
+  heroTopRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: space(0.5),
-    paddingHorizontal: space(4),
+    justifyContent: 'space-between',
+    marginBottom: space(0.5),
   },
   heroClock: {
     ...type.clock,
-    fontSize: 46,
-    lineHeight: 54,
-    fontVariant: ['tabular-nums'],
+    fontSize: 44,
+    lineHeight: 52,
+    marginVertical: space(0.5),
+  },
+  dayBarTrack: {
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginVertical: space(1),
+  },
+  dayBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  statusLine: {
+    ...type.small,
   },
   weekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: space(1),
+    gap: 6,
+  },
+  dayCellWrap: {
+    flex: 1,
   },
   dayCell: {
-    flex: 1,
+    minHeight: TAP + 8,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: space(1),
     borderRadius: radius.md,
-    marginHorizontal: 2,
-  },
-  dayDow: { ...type.caption, textTransform: 'uppercase' },
-  dayNum: { ...type.h3 },
-  card: {
     borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: space(2),
+    gap: 2,
+  },
+  dayDow: {
+    ...type.caption,
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  dayNum: {
+    ...type.mono,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  progressCard: {},
+  progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space(2),
   },
-  progressText: { gap: space(0.5), flex: 1 },
+  progressText: {
+    flex: 1,
+    gap: 4,
+  },
+  progressHeading: {
+    ...type.h2,
+  },
   ringCenter: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringNumber: { fontSize: 30, lineHeight: 34, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  nextCard: {
-    borderWidth: 1,
-    borderRadius: radius.xl,
-    overflow: 'hidden',
+  ringNumber: {
+    ...type.mono,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '700',
   },
-  nextCardBar: { height: 3 },
-  nextCardBody: { padding: space(2), gap: space(2) },
-  nextCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: space(2) },
-  countdownPill: {
-    borderRadius: radius.md,
-    paddingHorizontal: space(1.5),
-    paddingVertical: space(1),
+  ringSub: {
+    ...type.mono,
+    fontSize: 10,
+    lineHeight: 12,
   },
-  nextCardActions: { flexDirection: 'row', gap: space(1.5) },
-  nextAction: {
-    flex: 1,
+  nextCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: space(1.5),
+    marginBottom: space(2),
+  },
+  nextHeaderLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: space(1),
-    borderRadius: radius.md,
-    minHeight: TAP,
+    gap: 6,
   },
-  nextActionOutline: { borderWidth: 1 },
-  nextActionText: { fontSize: 15, fontWeight: '600' },
-  caption: {
-    ...type.caption,
-    textTransform: 'uppercase',
-    marginTop: space(1),
+  countdownPill: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: space(1.25),
+    paddingVertical: 6,
+  },
+  nextCardActions: {
+    flexDirection: 'row',
+    gap: space(1.25),
+  },
+  blockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: space(1),
   },
-  h2: { ...type.h2 },
-  h3: { ...type.h3 },
-  body: { ...type.body },
-  small: { ...type.small },
-  mono: { ...type.mono, fontVariant: ['tabular-nums'] },
+  ritualList: {
+    gap: 2,
+  },
   ritualRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space(2),
-    paddingVertical: space(1.5),
-    borderBottomWidth: 1,
+    gap: space(1.5),
+    minHeight: TAP,
+    paddingVertical: space(1),
   },
-  check: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
+  slotHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: space(1.5),
   },
-  slotHeader: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
-  slotBtn: {
+  slotInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  slotTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  slotName: {
+    ...type.h3,
+  },
+  quickAddWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: space(2),
-    minHeight: TAP,
-    justifyContent: 'center',
+    borderRadius: radius.lg,
+    paddingLeft: space(2),
+    paddingRight: space(0.75),
+    minHeight: TAP + 4,
+    gap: space(1),
   },
-  startBtn: {
-    marginTop: space(1.5),
-    borderRadius: radius.md,
-    minHeight: TAP,
+  quickInput: {
+    flex: 1,
+    ...type.body,
+    paddingVertical: space(1),
+  },
+  quickBtn: {
+    width: TAP,
+    height: TAP,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  startBtnText: { fontSize: 15, fontWeight: '600' },
-  overrideRow: { paddingVertical: space(1.5), minHeight: TAP, justifyContent: 'center' },
+  quickBtnInner: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tasksHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: space(0.5),
+  },
+  sectionTitle: {
+    ...type.caption,
+    fontSize: 12,
+    letterSpacing: 1.4,
+  },
+  sectionCaption: {
+    ...type.caption,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: 2,
+    gap: 2,
+  },
+  toggleItem: {},
+  toggleInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: space(1.25),
+    minHeight: 34,
+    borderRadius: radius.sm - 2,
+  },
+  toggleText: {
+    ...type.caption,
+    fontSize: 11,
+    letterSpacing: 0.4,
+  },
+  filterRow: {
+    gap: space(1),
+    paddingVertical: 2,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space(1.75),
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterChipText: {
+    ...type.caption,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  taskList: {
+    gap: space(1.25),
+  },
+  timelineWrap: {
+    gap: space(2),
+  },
+  timelineBlock: {
+    gap: space(1),
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space(1),
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  timelineRail: {
+    borderLeftWidth: 1,
+    marginLeft: 3.5,
+    paddingLeft: space(1.75),
+    gap: space(1.25),
+  },
+  overrideRow: {},
+  overrideRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: TAP,
+    paddingHorizontal: space(2),
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  h2: { ...type.h2 },
+  body: { ...type.body },
+  small: { ...type.small },
+  monoSmall: {
+    ...type.mono,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  monoBadge: {
+    ...type.mono,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
 });

@@ -1,15 +1,11 @@
 /**
- * CheckOff — swipeable task row (Phase 2 + Phase 3 reskin).
+ * CheckOff — swipeable task card (monotone precision design).
  *
- * - Swipe right past the threshold: complete (haptic + toggle), then snap back.
- * - Swipe left past the threshold: reveal Skip / Reschedule actions.
- * - Long-press: open the task action sheet (Edit / Duplicate / Delete / Reschedule).
- * - Left priority bar: high = danger, medium = accent, low = success.
- * - Overdue badge for pending tasks past their alarm time (red tint).
- * - Phase 3: checkbox with drawn checkmark animation (Reanimated + SVG,
- *   runs on the UI thread), time in mono on the right, 16pt radii.
- *
- * PanResponder-based (matches AddTaskSheet's drag pattern); no new deps.
+ * - Swipe right past threshold: complete (haptic tick at threshold + release).
+ * - Swipe left past threshold: reveal Skip / Move actions.
+ * - Long-press: open TaskActionSheet (Edit / Duplicate / Delete / Reschedule).
+ * - Layered surface with 1px top specular highlight, thin left priority rule,
+ *   mono time, category label, priority marker, duration, and timer shortcut.
  */
 import { useEffect, useRef } from 'react';
 import {
@@ -22,6 +18,7 @@ import {
 } from 'react-native';
 import Animated, {
   createAnimatedComponent,
+  Easing,
   useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
@@ -29,38 +26,48 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle as SvgCircle, Path } from 'react-native-svg';
-import { CalendarDays, Check, SkipForward } from 'lucide-react-native';
-import { categoryColor, radius, shadow, space, TAP, type, type ThemePalette } from '../theme/tokens';
+import { CalendarDays, Check, Play, SkipForward } from 'lucide-react-native';
+import {
+  categoryColor,
+  HIT_SLOP,
+  motion,
+  priorityRuleColor,
+  radius,
+  shadow,
+  space,
+  TAP,
+  type,
+  type ThemePalette,
+} from '../theme/tokens';
 import type { TaskInstance } from '../db/types';
 import { haptics } from '../haptics';
 import { PressableScale } from './PressableScale';
 
-const SWIPE_COMPLETE_AT = 90;
-const SWIPE_OPEN_AT = -110;
-const ACTIONS_WIDTH = 168;
+const SWIPE_COMPLETE_AT = 84;
+const SWIPE_OPEN_AT = -96;
+const ACTIONS_WIDTH = 152;
 
 const AnimatedPath = createAnimatedComponent(Path);
 const AnimatedSvgCircle = createAnimatedComponent(SvgCircle);
 
-/** Approx. length of the check path below (M6 12.5 L10.5 17 L18 7.5). */
 const CHECK_LEN = 19;
-const CHECK_SIZE = 26;
+const CHECK_SIZE = 24;
 
 export function priorityColor(priority: TaskInstance['priority'], theme: ThemePalette): string {
-  switch (priority) {
-    case 'high':
-      return theme.danger;
-    case 'low':
-      return theme.success;
-    default:
-      return theme.accent;
-  }
+  return priorityRuleColor(priority ?? 'medium', theme);
 }
 
-/**
- * Checkbox with a drawn checkmark. The stroke draws in on check and
- * retracts on uncheck, all on the UI thread via Reanimated animatedProps.
- */
+export function formatTimeDisplay(hhmm: string | null, format: '12h' | '24h' = '24h'): string {
+  if (!hhmm) return '--:--';
+  if (format === '24h') return hhmm;
+  const parts = hhmm.split(':').map(Number);
+  if (parts.length < 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return hhmm;
+  const [h, m] = parts;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
 export function AnimatedCheck({
   checked,
   theme,
@@ -72,15 +79,20 @@ export function AnimatedCheck({
   const fill = useSharedValue(checked ? 1 : 0);
 
   useEffect(() => {
-    draw.value = withTiming(checked ? 1 : 0, { duration: 220 });
-    fill.value = withTiming(checked ? 1 : 0, { duration: 180 });
+    draw.value = withTiming(checked ? 1 : 0, {
+      duration: motion.normal,
+      easing: Easing.out(Easing.cubic),
+    });
+    fill.value = withTiming(checked ? 1 : 0, {
+      duration: motion.fast,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [checked, draw, fill]);
 
   const pathProps = useAnimatedProps(() => ({
     strokeDashoffset: CHECK_LEN * (1 - draw.value),
   }));
   const circleProps = useAnimatedProps(() => ({
-    // Crossfade the fill by animating opacity of an accent disc.
     opacity: fill.value,
   }));
 
@@ -91,8 +103,8 @@ export function AnimatedCheck({
         cy={12}
         r={10}
         fill="none"
-        stroke={checked ? theme.accent : theme.textFaint}
-        strokeWidth={2}
+        stroke={checked ? theme.accent : theme.borderStrong}
+        strokeWidth={1.75}
       />
       <AnimatedSvgCircle
         cx={12}
@@ -119,34 +131,38 @@ interface Props {
   item: TaskInstance;
   theme: ThemePalette;
   categoryToken?: string;
+  categoryName?: string;
+  clockFormat?: '12h' | '24h';
   isNext: boolean;
   overdue: boolean;
   onToggle: () => void;
   onSkip: () => void;
   onReschedule: () => void;
   onLongPress: () => void;
+  onStartTimer?: () => void;
 }
 
 export function TaskRow({
   item,
   theme,
   categoryToken,
+  categoryName,
+  clockFormat = '24h',
   isNext,
   overdue,
   onToggle,
   onSkip,
   onReschedule,
   onLongPress,
+  onStartTimer,
 }: Props) {
   const translateX = useRef(new RNAnimated.Value(0)).current;
   const openRef = useRef(false);
   const pressScale = useSharedValue(1);
-  // Swipe-threshold ticks fire once per gesture (reset on release).
   const tickedRight = useRef(false);
   const tickedLeft = useRef(false);
-  // The PanResponder is created once; keep a live ref to status so the
-  // threshold logic never acts on a stale closure.
   const statusRef = useRef(item.status);
+
   useEffect(() => {
     statusRef.current = item.status;
   }, [item.status]);
@@ -155,18 +171,32 @@ export function TaskRow({
     transform: [{ scale: pressScale.value }],
   }));
 
-  // Reanimated shared values are mutated by design; the React Compiler
-  // lint rule does not model them.
   // eslint-disable-next-line react-hooks/immutability
-  const checkPressIn = () => { pressScale.value = withSpring(0.88, { damping: 14, stiffness: 450 }); };
+  const checkPressIn = () => {
+    pressScale.value = withSpring(0.92, {
+      damping: 26,
+      stiffness: 420,
+      overshootClamping: true,
+    });
+  };
   // eslint-disable-next-line react-hooks/immutability
-  const checkPressOut = () => { pressScale.value = withSpring(1, { damping: 14, stiffness: 450 }); };
+  const checkPressOut = () => {
+    pressScale.value = withSpring(1, {
+      damping: 26,
+      stiffness: 420,
+      overshootClamping: true,
+    });
+  };
 
   const snapBack = () => {
     openRef.current = false;
     tickedRight.current = false;
     tickedLeft.current = false;
-    RNAnimated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    RNAnimated.timing(translateX, {
+      toValue: 0,
+      duration: motion.fast,
+      useNativeDriver: true,
+    }).start();
   };
 
   const panResponder = useRef(
@@ -175,10 +205,8 @@ export function TaskRow({
       onMoveShouldSetPanResponder: (_, g) =>
         Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
       onPanResponderMove: (_, g) => {
-        // Clamp: allow a full right-swipe pull, limited left reveal.
-        const dx = Math.max(-ACTIONS_WIDTH - 24, Math.min(g.dx, 130));
+        const dx = Math.max(-ACTIONS_WIDTH - 16, Math.min(g.dx, 120));
         translateX.setValue(dx);
-        // Haptic tick the moment the gesture crosses an action threshold.
         if (statusRef.current === 'pending') {
           if (dx >= SWIPE_COMPLETE_AT && !tickedRight.current) {
             tickedRight.current = true;
@@ -193,9 +221,8 @@ export function TaskRow({
         tickedRight.current = false;
         tickedLeft.current = false;
         if (g.dx >= SWIPE_COMPLETE_AT && statusRef.current === 'pending') {
-          // Swipe right → complete (haptic fires via onToggle), then reset.
           RNAnimated.timing(translateX, {
-            toValue: 130,
+            toValue: 120,
             duration: 120,
             useNativeDriver: true,
           }).start(() => {
@@ -203,10 +230,10 @@ export function TaskRow({
             translateX.setValue(0);
           });
         } else if (g.dx <= SWIPE_OPEN_AT && statusRef.current === 'pending') {
-          // Swipe left → reveal actions (pending tasks only).
           openRef.current = true;
-          RNAnimated.spring(translateX, {
+          RNAnimated.timing(translateX, {
             toValue: -ACTIONS_WIDTH,
+            duration: motion.fast,
             useNativeDriver: true,
           }).start();
         } else {
@@ -228,15 +255,19 @@ export function TaskRow({
   };
 
   const done = item.status === 'done';
+  const prio = item.priority ?? 'medium';
+  const prioLabel = prio === 'high' ? 'HIGH' : prio === 'low' ? 'LOW' : 'MED';
 
   return (
     <View style={[styles.clip, { borderRadius: radius.lg }]}>
       {/* Underlay: swipe-right complete */}
-      <View style={[styles.underlay, styles.underlayLeft, { backgroundColor: theme.success }]}>
-        <Check color="#fff" size={22} strokeWidth={2.5} />
+      <View style={[styles.underlay, styles.underlayLeft, { backgroundColor: theme.accent }]}>
+        <Check color={theme.onAccent} size={20} strokeWidth={2.5} />
+        <Text style={[styles.underlayText, { color: theme.onAccent }]}>COMPLETE</Text>
       </View>
+
       {/* Underlay: swipe-left actions */}
-      <View style={[styles.underlay, styles.underlayRight]}>
+      <View style={[styles.underlay, styles.underlayRight, { backgroundColor: theme.surface2 }]}>
         <PressableScale
           onPress={() => {
             snapBack();
@@ -247,8 +278,10 @@ export function TaskRow({
           accessibilityRole="button"
           accessibilityLabel="Skip task"
         >
-          <SkipForward color={theme.textDim} size={18} strokeWidth={2} />
-          <Text style={[styles.actionLabel, { color: theme.textDim }]}>Skip</Text>
+          <SkipForward color={theme.textDim} size={16} strokeWidth={2} />
+          <Text style={[styles.actionLabel, { color: theme.textDim }]} numberOfLines={1}>
+            Skip
+          </Text>
         </PressableScale>
         <PressableScale
           onPress={() => {
@@ -256,12 +289,14 @@ export function TaskRow({
             onReschedule();
           }}
           style={styles.actionBtn}
-          innerStyle={[styles.actionInner, { backgroundColor: theme.accentDim }]}
+          innerStyle={[styles.actionInner, { backgroundColor: theme.surface3 }]}
           accessibilityRole="button"
-          accessibilityLabel="Reschedule task"
+          accessibilityLabel="Move task"
         >
-          <CalendarDays color={theme.accent} size={18} strokeWidth={2} />
-          <Text style={[styles.actionLabel, { color: theme.accent }]}>Move</Text>
+          <CalendarDays color={theme.text} size={16} strokeWidth={2} />
+          <Text style={[styles.actionLabel, { color: theme.text }]} numberOfLines={1}>
+            Move
+          </Text>
         </PressableScale>
       </View>
 
@@ -272,29 +307,34 @@ export function TaskRow({
           shadow.sm,
           {
             backgroundColor: theme.surface,
-            borderColor: overdue ? theme.danger : theme.border,
+            borderColor: overdue ? theme.borderStrong : isNext ? theme.borderStrong : theme.border,
             transform: [{ translateX }],
           },
         ]}
       >
-        {/* Priority bar */}
+        {/* Top 1px specular highlight */}
+        <View
+          pointerEvents="none"
+          style={[styles.topEdge, { backgroundColor: theme.topHighlight }]}
+        />
+
+        {/* Thin left priority rule */}
         <View
           style={[
             styles.priorityBar,
-            { backgroundColor: priorityColor(item.priority ?? 'medium', theme) },
+            { backgroundColor: priorityRuleColor(prio, theme) },
           ]}
         />
-        {isNext && <View style={[styles.nextBar, { backgroundColor: theme.accent }]} />}
 
-        {/* Checkbox */}
+        {/* Checkbox (48dp touch target) */}
         <Pressable
           onPress={handlePress}
           onLongPress={handleLongPress}
-          delayLongPress={450}
+          delayLongPress={400}
           onPressIn={checkPressIn}
           onPressOut={checkPressOut}
           style={styles.checkWrap}
-          hitSlop={6}
+          hitSlop={HIT_SLOP}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: done }}
           accessibilityLabel={item.title}
@@ -304,63 +344,104 @@ export function TaskRow({
           </Animated.View>
         </Pressable>
 
-        {/* Main content */}
+        {/* Main task body */}
         <Pressable
           onPress={handlePress}
           onLongPress={handleLongPress}
-          delayLongPress={450}
+          delayLongPress={400}
           style={styles.taskMain}
-          hitSlop={2}
         >
-          {isNext && <Text style={[styles.nextCaption, { color: theme.accent }]}>NEXT</Text>}
-          <Text
-            style={[
-              styles.body,
-              {
-                color: done ? theme.textFaint : theme.text,
-                textDecorationLine: done ? 'line-through' : 'none',
-              },
-            ]}
-            numberOfLines={2}
-          >
-            {item.title}
-          </Text>
-          <View style={styles.metaLine}>
-            <View
-              style={[styles.dot, { backgroundColor: categoryColor(categoryToken ?? 'slate') }]}
-            />
-            <Text style={[styles.mono, { color: theme.textFaint }]}>{item.durationMin}m</Text>
-            {overdue && (
-              <View style={[styles.overdueBadge, { backgroundColor: theme.danger }]}>
-                <Text style={[styles.overdueText, { color: '#fff' }]}>Overdue</Text>
+          <View style={styles.titleRow}>
+            {isNext && !done && (
+              <View style={[styles.nextBadge, { borderColor: theme.borderStrong }]}>
+                <Text style={[styles.nextCaption, { color: theme.text }]}>NEXT</Text>
               </View>
             )}
+            {overdue && !done && (
+              <View style={[styles.overdueBadge, { backgroundColor: theme.accent }]}>
+                <Text style={[styles.overdueText, { color: theme.onAccent }]}>LATE</Text>
+              </View>
+            )}
+            <Text
+              style={[
+                styles.body,
+                {
+                  color: done ? theme.textFaint : theme.text,
+                  textDecorationLine: done ? 'line-through' : 'none',
+                },
+              ]}
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
+          </View>
+
+          <View style={styles.metaLine}>
+            <Text
+              style={[
+                styles.monoTime,
+                { color: overdue && !done ? theme.text : theme.textDim },
+              ]}
+              numberOfLines={1}
+            >
+              {formatTimeDisplay(item.alarmTime, clockFormat)}
+            </Text>
+            <Text style={[styles.sep, { color: theme.textFaint }]}>·</Text>
+            <Text style={[styles.monoMeta, { color: theme.textFaint }]} numberOfLines={1}>
+              {item.durationMin}m
+            </Text>
+            <Text style={[styles.sep, { color: theme.textFaint }]}>·</Text>
+            <View
+              style={[
+                styles.dot,
+                { backgroundColor: categoryColor(categoryToken ?? 'slate', theme) },
+              ]}
+            />
+            {categoryName ? (
+              <Text style={[styles.metaLabel, { color: theme.textDim }]} numberOfLines={1}>
+                {categoryName}
+              </Text>
+            ) : null}
+            <View
+              style={[
+                styles.prioPill,
+                {
+                  borderColor: prio === 'high' ? theme.borderStrong : theme.border,
+                  backgroundColor: prio === 'high' ? theme.surface3 : 'transparent',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.prioText,
+                  { color: prio === 'high' ? theme.text : theme.textFaint },
+                ]}
+              >
+                {prioLabel}
+              </Text>
+            </View>
             {item.status !== 'pending' && !done && (
-              <Text style={[styles.small, { color: theme.textFaint }]}>{item.status}</Text>
+              <Text style={[styles.statusTag, { color: theme.textFaint }]}>
+                {item.status.toUpperCase()}
+              </Text>
             )}
           </View>
         </Pressable>
 
-        {/* Time, mono, right-aligned */}
-        <View style={styles.timeWrap}>
-          <Text
-            style={[
-              styles.mono,
-              styles.timeText,
-              { color: overdue ? theme.danger : theme.textDim },
-            ]}
-          >
-            {item.alarmTime ?? '--:--'}
-          </Text>
-        </View>
-
-        {item.status === 'pending' && (
+        {/* Right actions: Timer shortcut */}
+        {item.status === 'pending' && onStartTimer && (
           <PressableScale
-            onPress={onSkip}
-            style={[styles.skipBtn, { minHeight: TAP }]}
-            hitSlop={8}
+            onPress={onStartTimer}
+            hitSlop={HIT_SLOP}
+            style={styles.timerBtn}
+            innerStyle={[
+              styles.timerBtnInner,
+              { backgroundColor: theme.surface2, borderColor: theme.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Start timer for ${item.title}`}
           >
-            <Text style={[styles.small, { color: theme.textFaint }]}>Skip</Text>
+            <Play color={theme.text} size={14} strokeWidth={2.2} />
           </PressableScale>
         )}
       </RNAnimated.View>
@@ -371,13 +452,19 @@ export function TaskRow({
 const styles = StyleSheet.create({
   clip: { overflow: 'hidden' },
   underlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
     alignItems: 'center',
   },
   underlayLeft: {
     justifyContent: 'flex-start',
     paddingLeft: space(2.5),
+    gap: space(1),
+  },
+  underlayText: {
+    ...type.caption,
+    fontWeight: '700',
+    letterSpacing: 1.2,
   },
   underlayRight: {
     justifyContent: 'flex-end',
@@ -390,52 +477,139 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space(0.5),
+    gap: 4,
   },
   actionLabel: { ...type.caption, textTransform: 'uppercase' },
   row: {
     borderWidth: 1,
     borderRadius: radius.lg,
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: 'transparent',
+    position: 'relative',
   },
-  priorityBar: { width: 4 },
-  nextBar: { width: 3 },
+  topEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 12,
+    right: 12,
+    height: 1,
+    zIndex: 2,
+  },
+  priorityBar: {
+    width: 3,
+    alignSelf: 'stretch',
+  },
   checkWrap: {
-    justifyContent: 'center',
-    paddingLeft: space(1.5),
-    paddingRight: space(1),
+    width: TAP,
     minHeight: TAP,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   taskMain: {
     flex: 1,
-    gap: space(0.5),
-    minHeight: TAP,
+    gap: 6,
+    minHeight: TAP + 16,
     justifyContent: 'center',
     paddingVertical: space(1.5),
+    paddingRight: space(1),
   },
-  metaLine: { flexDirection: 'row', alignItems: 'center', gap: space(1) },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  nextCaption: { ...type.caption },
-  body: { ...type.body },
-  small: { ...type.small },
-  mono: { ...type.mono, fontVariant: ['tabular-nums'] },
-  timeWrap: {
-    justifyContent: 'center',
-    paddingRight: space(1.5),
-    paddingLeft: space(1),
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  timeText: { fontSize: 14 },
+  nextBadge: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  nextCaption: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
   overdueBadge: {
-    borderRadius: radius.sm,
-    paddingHorizontal: space(1),
-    paddingVertical: space(0.25),
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
   },
-  overdueText: { ...type.caption, fontWeight: '700', textTransform: 'uppercase' },
-  skipBtn: {
+  overdueText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  body: {
+    ...type.bodyMedium,
+    flexShrink: 1,
+  },
+  metaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  monoTime: {
+    ...type.mono,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  monoMeta: {
+    ...type.mono,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  sep: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  metaLabel: {
+    ...type.small,
+    fontSize: 12,
+    lineHeight: 16,
+    maxWidth: 96,
+  },
+  prioPill: {
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  prioText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  statusTag: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  timerBtn: {
+    width: TAP,
+    height: TAP,
+    marginRight: space(1),
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space(1.5),
+  },
+  timerBtnInner: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
