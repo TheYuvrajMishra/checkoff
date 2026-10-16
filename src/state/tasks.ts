@@ -15,7 +15,7 @@ import {
   type NewInstance,
   type TaskInstanceEx,
 } from '../db/repos/instances';
-import { cancelTaskAlarm } from '../notifications';
+import { cancelTaskAlarm, scheduleTaskAlarm } from '../notifications';
 import { localDateString } from '../db/time';
 
 let db: SQLiteDatabase | null = null;
@@ -91,14 +91,16 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
     try {
       const current = get().instances.find((i) => i.id === id);
       if (!current) return;
-      await setInstanceStatus(
-        requireDb(),
-        id,
-        current.status === 'done' ? 'pending' : 'done',
-        'user'
-      );
-      // A completed/unchecked task no longer needs its alarm.
-      void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      const nextStatus = current.status === 'done' ? 'pending' : 'done';
+      await setInstanceStatus(requireDb(), id, nextStatus, 'user');
+      if (nextStatus === 'pending' && current.alarmTime) {
+        void scheduleTaskAlarm(requireDb(), {
+          ...current,
+          status: 'pending',
+        }).catch(() => {});
+      } else {
+        void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      }
       await get().refresh();
     } catch (e) {
       console.error('[tasks] toggleDone failed', e);
@@ -117,7 +119,10 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
 
   addManual: async (input: NewInstance) => {
     try {
-      await createInstance(requireDb(), input);
+      const created = await createInstance(requireDb(), input);
+      if (created.alarmTime) {
+        await scheduleTaskAlarm(requireDb(), created).catch(() => {});
+      }
       await get().refresh(input.date ?? get().date);
     } catch (e) {
       console.error('[tasks] addManual failed', e);
@@ -126,8 +131,12 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
 
   updateTask: async (id: string, patch: InstancePatch) => {
     try {
-      await updateInstance(requireDb(), id, patch);
-      void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      const updated = await updateInstance(requireDb(), id, patch);
+      if (updated.status === 'pending' && updated.alarmTime && !updated.deleted) {
+        await scheduleTaskAlarm(requireDb(), updated).catch(() => {});
+      } else {
+        await cancelTaskAlarm(requireDb(), id).catch(() => {});
+      }
       await get().refresh();
     } catch (e) {
       console.error('[tasks] updateTask failed', e);
@@ -136,7 +145,10 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
 
   duplicateTask: async (id: string) => {
     try {
-      await duplicateInstance(requireDb(), id);
+      const copy = await duplicateInstance(requireDb(), id);
+      if (copy.alarmTime) {
+        await scheduleTaskAlarm(requireDb(), copy).catch(() => {});
+      }
       await get().refresh();
     } catch (e) {
       console.error('[tasks] duplicateTask failed', e);
@@ -155,8 +167,12 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
 
   rescheduleTask: async (id: string, date: string) => {
     try {
-      await rescheduleInstance(requireDb(), id, date);
-      void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      const moved = await rescheduleInstance(requireDb(), id, date);
+      if (moved.status === 'pending' && moved.alarmTime && !moved.deleted) {
+        await scheduleTaskAlarm(requireDb(), moved).catch(() => {});
+      } else {
+        await cancelTaskAlarm(requireDb(), id).catch(() => {});
+      }
       await get().refresh();
     } catch (e) {
       console.error('[tasks] rescheduleTask failed', e);

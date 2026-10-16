@@ -221,6 +221,14 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="add-task" options={{ presentation: 'modal' }} />
+          <Stack.Screen
+            name="alarm"
+            options={{
+              presentation: 'fullScreenModal',
+              animation: 'fade',
+              gestureEnabled: false,
+            }}
+          />
           <Stack.Screen name="timer" />
           <Stack.Screen name="day/[date]" />
         </Stack>

@@ -18,6 +18,7 @@ import { localDateString } from '../db/time';
 import { TaskForm, type TaskFormValues } from './TaskForm';
 import type { Category } from '../db/types';
 import { Sheet } from './Sheet';
+import { scheduleTaskAlarm } from '../notifications';
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
@@ -26,6 +27,8 @@ interface Props {
   onClose: () => void;
   /** Prefill the form's date. Defaults to today. */
   initialDate?: string;
+  /** Alias for initialDate used by Calendar / Day detail views. */
+  defaultDate?: string;
   /** Edit mode: prefill the form from this instance and update it on submit. */
   editing?: TaskInstanceEx | null;
   /** Called with the chosen date after a task was added. */
@@ -45,6 +48,7 @@ export function AddTaskSheet({
   visible,
   onClose,
   initialDate,
+  defaultDate,
   editing,
   onAdded,
   onEdited,
@@ -60,6 +64,7 @@ export function AddTaskSheet({
   const [formKey, setFormKey] = useState(0);
 
   const isEditing = !!editing;
+  const resolvedInitialDate = initialDate ?? defaultDate ?? localDateString();
 
   useEffect(() => {
     if (!visible) return;
@@ -147,6 +152,9 @@ export function AddTaskSheet({
         isRitual: v.isRitual,
         priority: v.priority,
       });
+      if (instance.alarmTime) {
+        await scheduleTaskAlarm(db, instance).catch(() => {});
+      }
       if (v.notes) {
         await setMeta(db, `note:${instance.id}`, v.notes);
       }
@@ -173,7 +181,7 @@ export function AddTaskSheet({
           key={formKey}
           categories={categories}
           showInstanceDate={!isEditing}
-          initialDate={initialDate ?? localDateString()}
+          initialDate={resolvedInitialDate}
           initialValues={initialValues}
           submitLabel={
             isEditing

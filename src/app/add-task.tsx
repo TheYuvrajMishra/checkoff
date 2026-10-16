@@ -19,6 +19,7 @@ import { TaskForm, type TaskFormValues } from '../components/TaskForm';
 import type { Category } from '../db/types';
 import { MetallicText } from '../components/MetallicText';
 import { PressableScale } from '../components/PressableScale';
+import { scheduleTaskAlarm } from '../notifications';
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
@@ -70,6 +71,9 @@ export default function AddTask() {
         isRitual: v.isRitual,
         priority: v.priority,
       });
+      if (instance.alarmTime) {
+        await scheduleTaskAlarm(db, instance).catch(() => {});
+      }
       if (v.notes) {
         await setMeta(db, `note:${instance.id}`, v.notes);
       }
