@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     ...type.body,
     marginBottom: space(1),
   },
-  list: { paddingBottom: space(3), gap: space(1) },
+  list: { paddingBottom: 128, gap: space(1) },
   row: {
     borderWidth: 1,
     borderRadius: radius.md,

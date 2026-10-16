@@ -8,11 +8,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
+import {
+  createAnimatedComponent,
+  runOnJS,
+  useAnimatedProps,
+  useAnimatedReaction,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import { CalendarPlus } from 'lucide-react-native';
+import { CalendarPlus, Check, Play } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../../state/tasks';
 import { useUiStore } from '../../state/ui';
-import { dark, light, type, radius, space, TAP, type ThemePalette } from '../../theme/tokens';
+import { dark, light, shadow, type, radius, space, TAP, type ThemePalette } from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab } from '../../components/Fab';
@@ -31,6 +39,8 @@ import { lastPracticedAt, listSkills } from '../../db/repos/skills';
 import { listCategories } from '../../db/repos/categories';
 import { haptics } from '../../haptics';
 import type { Skill, TaskInstance } from '../../db/types';
+
+const AnimatedCircle = createAnimatedComponent(Circle);
 
 const DATE_FMT: Intl.DateTimeFormatOptions = {
   weekday: 'long',
@@ -59,6 +69,29 @@ function daysAgoLabel(lastTs: string | null, today: string): string {
   if (diff <= 0) return 'Practiced today';
   if (diff === 1) return 'Practiced yesterday';
   return `Practiced ${diff} days ago`;
+}
+
+/** "18:30" -> "6:30 PM". */
+function formatAlarm12h(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+/** Live countdown label from now to an "HH:MM" alarm today. */
+function countdownLabel(now: Date, alarmTime: string | null): string {
+  if (!alarmTime) return 'Up next';
+  const [h, m] = alarmTime.split(':').map(Number);
+  const target = new Date(now);
+  target.setHours(h, m, 0, 0);
+  const diffMs = target.getTime() - now.getTime();
+  if (diffMs <= 0) return 'Due now';
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem === 0 ? `in ${hrs}h` : `in ${hrs}h ${rem}m`;
 }
 
 interface OnTimeStats {
@@ -280,16 +313,19 @@ export default function TodayScreen() {
     setEditSheetOpen(true);
   }, []);
 
+  const showNextCard = date === todayStr && nextUp !== null;
+  const statusLine =
+    onTime.planned === 0
+      ? 'Nothing scheduled today'
+      : `${onTime.done} of ${onTime.planned} done${
+          nextUp?.alarmTime ? `, next at ${formatAlarm12h(nextUp.alarmTime)}` : ''
+        }`;
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Clock */}
-        <Text style={[styles.clock, { color: theme.text }]}>
-          {now.toLocaleTimeString('en-GB', { hour12: false })}
-        </Text>
-        <Text style={[styles.dateLine, { color: theme.textDim }]}>
-          {now.toLocaleDateString('en-GB', DATE_FMT)}
-        </Text>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Hero: live clock + day-progress arc + status */}
+        <DayHero theme={theme} now={now} statusLine={statusLine} />
 
         {/* Week strip */}
         <View style={styles.weekRow}>
@@ -327,11 +363,12 @@ export default function TodayScreen() {
         </View>
 
         {/* Progress ring */}
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={[styles.card, shadow.sm, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <ProgressRing theme={theme} done={onTime.done} planned={onTime.planned} />
           <View style={styles.progressText}>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>TODAY&apos;S PROGRESS</Text>
             <Text style={[styles.h3, { color: theme.text }]}>
-              {onTime.done}/{onTime.planned} done
+              {onTime.done} of {onTime.planned} done
             </Text>
             <Text style={[styles.small, { color: theme.textDim }]}>
               {onTime.onTimePct === null
@@ -340,6 +377,19 @@ export default function TodayScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Next-up card */}
+        {showNextCard && (
+          <NextUpCard
+            theme={theme}
+            item={nextUp}
+            countdown={countdownLabel(now, nextUp.alarmTime)}
+            onStart={() =>
+              router.push({ pathname: '/timer', params: { instanceId: nextUp.id } })
+            }
+            onDone={() => handleToggle(nextUp)}
+          />
+        )}
 
         {/* Rituals */}
         {rituals.length > 0 && (
@@ -467,6 +517,73 @@ export default function TodayScreen() {
   );
 }
 
+/**
+ * Hero: large live clock wrapped in a thin day-progress arc (SVG),
+ * date beneath, and a one-line status.
+ */
+function DayHero({
+  theme,
+  now,
+  statusLine,
+}: {
+  theme: ThemePalette;
+  now: Date;
+  statusLine: string;
+}) {
+  const size = 260;
+  const stroke = 3;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const dayFrac = Math.min(1, Math.max(0, (now.getTime() - startOfDay.getTime()) / 86400000));
+
+  return (
+    <View style={styles.hero}>
+      <View style={[styles.heroRing, { width: size, height: size }]}>
+        <Svg width={size} height={size}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={theme.border}
+            strokeWidth={stroke}
+            fill="none"
+            opacity={0.7}
+          />
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={theme.accent}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={`${c}`}
+            strokeDashoffset={c * (1 - dayFrac)}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        </Svg>
+        <View style={styles.heroCenter}>
+          <Text style={[styles.heroClock, { color: theme.text }]}>
+            {now.toLocaleTimeString('en-GB', { hour12: false })}
+          </Text>
+          <Text style={[styles.small, { color: theme.textDim, textAlign: 'center' }]}>
+            {now.toLocaleDateString('en-GB', DATE_FMT)}
+          </Text>
+        </View>
+      </View>
+      <Text style={[styles.body, { color: theme.textDim, textAlign: 'center' }]} numberOfLines={1}>
+        {statusLine}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Big progress ring: animated fill on the UI thread, center number counts
+ * up, subtle glow disc on 100% completion.
+ */
 function ProgressRing({
   theme,
   done,
@@ -476,34 +593,134 @@ function ProgressRing({
   done: number;
   planned: number;
 }) {
-  const size = 64;
-  const stroke = 7;
+  const size = 120;
+  const stroke = 10;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const frac = planned > 0 ? done / planned : 0;
+  const complete = planned > 0 && frac >= 1;
+
+  const progress = useSharedValue(0);
+  const [displayDone, setDisplayDone] = useState(0);
+
+  useEffect(() => {
+    progress.value = withTiming(frac, { duration: 700 });
+  }, [frac, progress]);
+
+  useAnimatedReaction(
+    () => Math.round(progress.value * planned),
+    (v, prev) => {
+      if (v !== prev) runOnJS(setDisplayDone)(v);
+    },
+    [planned]
+  );
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: c * (1 - progress.value),
+  }));
+
   return (
-    <Svg width={size} height={size}>
-      <Circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        stroke={theme.border}
-        strokeWidth={stroke}
-        fill="none"
-      />
-      <Circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        stroke={theme.accent}
-        strokeWidth={stroke}
-        fill="none"
-        strokeDasharray={`${c}`}
-        strokeDashoffset={c * (1 - frac)}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-    </Svg>
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={theme.border}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        {complete && (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={theme.accent}
+            strokeWidth={stroke + 10}
+            fill="none"
+            opacity={0.18}
+          />
+        )}
+        <AnimatedCircle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={theme.accent}
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={`${c}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          animatedProps={animatedProps}
+        />
+      </Svg>
+      <View style={styles.ringCenter}>
+        <Text style={[styles.ringNumber, { color: theme.text }]}>{displayDone}</Text>
+        <Text style={[styles.caption, { color: theme.textFaint }]}>OF {planned}</Text>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Next-up card: elevated above the list, live countdown, Start / Done.
+ */
+function NextUpCard({
+  theme,
+  item,
+  countdown,
+  onStart,
+  onDone,
+}: {
+  theme: ThemePalette;
+  item: TaskInstance;
+  countdown: string;
+  onStart: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <View
+      style={[
+        styles.nextCard,
+        shadow.md,
+        { backgroundColor: theme.surface, borderColor: theme.border },
+      ]}
+    >
+      <View style={[styles.nextCardBar, { backgroundColor: theme.accent }]} />
+      <View style={styles.nextCardBody}>
+        <View style={styles.nextCardTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.caption, { color: theme.accent }]}>NEXT UP</Text>
+            <Text style={[styles.h2, { color: theme.text }]} numberOfLines={2}>
+              {item.title}
+            </Text>
+          </View>
+          <View style={[styles.countdownPill, { backgroundColor: theme.accentDim }]}>
+            <Text style={[styles.mono, { color: theme.accent }]}>{countdown}</Text>
+          </View>
+        </View>
+        <View style={styles.nextCardActions}>
+          <Pressable
+            onPress={onStart}
+            style={[styles.nextAction, { backgroundColor: theme.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel="Start timer"
+          >
+            <Play color={theme.onAccent} size={16} strokeWidth={2.5} />
+            <Text style={[styles.nextActionText, { color: theme.onAccent }]}>Start</Text>
+          </Pressable>
+          <Pressable
+            onPress={onDone}
+            style={[styles.nextAction, styles.nextActionOutline, { borderColor: theme.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Mark done"
+          >
+            <Check color={theme.text} size={16} strokeWidth={2.5} />
+            <Text style={[styles.nextActionText, { color: theme.text }]}>Done</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -519,12 +736,12 @@ function CheckCircle({
       style={[
         styles.check,
         {
-          borderColor: checked ? theme.accent : theme.border,
+          borderColor: checked ? theme.accent : theme.textFaint,
           backgroundColor: checked ? theme.accent : 'transparent',
         },
       ]}
     >
-      {checked && <Text style={[styles.checkMark, { color: theme.onAccent }]}>✓</Text>}
+      {checked && <Check color={theme.onAccent} size={20} strokeWidth={3} />}
     </View>
   );
 }
@@ -561,12 +778,23 @@ function RitualRow({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { padding: space(2), gap: space(2), paddingBottom: space(6) },
-  clock: {
+  // Clears the floating glass tab bar + FAB.
+  scroll: { padding: space(2), gap: space(2), paddingBottom: 128 },
+  hero: { alignItems: 'center', gap: space(1.5), paddingTop: space(1) },
+  heroRing: { alignItems: 'center', justifyContent: 'center' },
+  heroCenter: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space(0.5),
+    paddingHorizontal: space(4),
+  },
+  heroClock: {
     ...type.clock,
+    fontSize: 46,
+    lineHeight: 54,
     fontVariant: ['tabular-nums'],
   },
-  dateLine: { ...type.body, marginTop: space(0.5) },
   weekRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -589,13 +817,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space(2),
   },
-  progressText: { gap: space(0.5) },
+  progressText: { gap: space(0.5), flex: 1 },
+  ringCenter: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringNumber: { fontSize: 30, lineHeight: 34, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  nextCard: {
+    borderWidth: 1,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+  },
+  nextCardBar: { height: 3 },
+  nextCardBody: { padding: space(2), gap: space(2) },
+  nextCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: space(2) },
+  countdownPill: {
+    borderRadius: radius.md,
+    paddingHorizontal: space(1.5),
+    paddingVertical: space(1),
+  },
+  nextCardActions: { flexDirection: 'row', gap: space(1.5) },
+  nextAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space(1),
+    borderRadius: radius.md,
+    minHeight: TAP,
+  },
+  nextActionOutline: { borderWidth: 1 },
+  nextActionText: { fontSize: 15, fontWeight: '600' },
   caption: {
     ...type.caption,
     textTransform: 'uppercase',
     marginTop: space(1),
     marginBottom: space(1),
   },
+  h2: { ...type.h2 },
   h3: { ...type.h3 },
   body: { ...type.body },
   small: { ...type.small },
@@ -608,29 +868,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   check: {
-    width: TAP,
-    height: TAP,
-    borderRadius: TAP / 2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  checkMark: { fontSize: 20, fontWeight: '700' },
-  taskRow: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: space(1.5),
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space(1),
-  },
-  taskMain: { flex: 1, gap: space(0.5), minHeight: TAP, justifyContent: 'center' },
-  taskLine: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  nextCaption: { ...type.caption },
-  skipBtn: {
-    justifyContent: 'center',
-    paddingHorizontal: space(1.5),
   },
   slotHeader: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
   slotBtn: {

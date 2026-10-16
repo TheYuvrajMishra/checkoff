@@ -1,31 +1,49 @@
 /**
- * CheckOff — swipeable task row (Phase 2).
+ * CheckOff — swipeable task row (Phase 2 + Phase 3 reskin).
  *
  * - Swipe right past the threshold: complete (haptic + toggle), then snap back.
  * - Swipe left past the threshold: reveal Skip / Reschedule actions.
  * - Long-press: open the task action sheet (Edit / Duplicate / Delete / Reschedule).
  * - Left priority bar: high = danger, medium = accent, low = success.
  * - Overdue badge for pending tasks past their alarm time (red tint).
+ * - Phase 3: checkbox with drawn checkmark animation (Reanimated + SVG,
+ *   runs on the UI thread), time in mono on the right, 16pt radii.
  *
  * PanResponder-based (matches AddTaskSheet's drag pattern); no new deps.
  */
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
-  Animated,
+  Animated as RNAnimated,
   PanResponder,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Animated, {
+  createAnimatedComponent,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Circle as SvgCircle, Path } from 'react-native-svg';
 import { CalendarDays, Check, SkipForward } from 'lucide-react-native';
-import { categoryColor, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
+import { categoryColor, radius, shadow, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import type { TaskInstance } from '../db/types';
 import { haptics } from '../haptics';
 
 const SWIPE_COMPLETE_AT = 90;
 const SWIPE_OPEN_AT = -110;
 const ACTIONS_WIDTH = 168;
+
+const AnimatedPath = createAnimatedComponent(Path);
+const AnimatedSvgCircle = createAnimatedComponent(SvgCircle);
+
+/** Approx. length of the check path below (M6 12.5 L10.5 17 L18 7.5). */
+const CHECK_LEN = 19;
+const CHECK_SIZE = 26;
 
 export function priorityColor(priority: TaskInstance['priority'], theme: ThemePalette): string {
   switch (priority) {
@@ -36,6 +54,64 @@ export function priorityColor(priority: TaskInstance['priority'], theme: ThemePa
     default:
       return theme.accent;
   }
+}
+
+/**
+ * Checkbox with a drawn checkmark. The stroke draws in on check and
+ * retracts on uncheck, all on the UI thread via Reanimated animatedProps.
+ */
+export function AnimatedCheck({
+  checked,
+  theme,
+}: {
+  checked: boolean;
+  theme: ThemePalette;
+}) {
+  const draw = useSharedValue(checked ? 1 : 0);
+  const fill = useSharedValue(checked ? 1 : 0);
+
+  useEffect(() => {
+    draw.value = withTiming(checked ? 1 : 0, { duration: 220 });
+    fill.value = withTiming(checked ? 1 : 0, { duration: 180 });
+  }, [checked, draw, fill]);
+
+  const pathProps = useAnimatedProps(() => ({
+    strokeDashoffset: CHECK_LEN * (1 - draw.value),
+  }));
+  const circleProps = useAnimatedProps(() => ({
+    // Crossfade the fill by animating opacity of an accent disc.
+    opacity: fill.value,
+  }));
+
+  return (
+    <Svg width={CHECK_SIZE} height={CHECK_SIZE} viewBox="0 0 24 24">
+      <SvgCircle
+        cx={12}
+        cy={12}
+        r={10}
+        fill="none"
+        stroke={checked ? theme.accent : theme.textFaint}
+        strokeWidth={2}
+      />
+      <AnimatedSvgCircle
+        cx={12}
+        cy={12}
+        r={10}
+        fill={theme.accent}
+        animatedProps={circleProps}
+      />
+      <AnimatedPath
+        d="M6 12.5 L10.5 17 L18 7.5"
+        fill="none"
+        stroke={theme.onAccent}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={CHECK_LEN}
+        animatedProps={pathProps}
+      />
+    </Svg>
+  );
 }
 
 interface Props {
@@ -61,12 +137,24 @@ export function TaskRow({
   onReschedule,
   onLongPress,
 }: Props) {
-  const translateX = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new RNAnimated.Value(0)).current;
   const openRef = useRef(false);
+  const pressScale = useSharedValue(1);
+
+  const pressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  // Reanimated shared values are mutated by design; the React Compiler
+  // lint rule does not model them.
+  // eslint-disable-next-line react-hooks/immutability
+  const checkPressIn = () => { pressScale.value = withSpring(0.88, { damping: 14, stiffness: 450 }); };
+  // eslint-disable-next-line react-hooks/immutability
+  const checkPressOut = () => { pressScale.value = withSpring(1, { damping: 14, stiffness: 450 }); };
 
   const snapBack = () => {
     openRef.current = false;
-    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    RNAnimated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
   };
 
   const panResponder = useRef(
@@ -82,7 +170,7 @@ export function TaskRow({
       onPanResponderRelease: (_, g) => {
         if (g.dx >= SWIPE_COMPLETE_AT && item.status === 'pending') {
           // Swipe right → complete with haptic, then reset.
-          Animated.timing(translateX, {
+          RNAnimated.timing(translateX, {
             toValue: 130,
             duration: 120,
             useNativeDriver: true,
@@ -94,7 +182,7 @@ export function TaskRow({
           // Swipe left → reveal actions (pending tasks only).
           void haptics.check();
           openRef.current = true;
-          Animated.spring(translateX, {
+          RNAnimated.spring(translateX, {
             toValue: -ACTIONS_WIDTH,
             useNativeDriver: true,
           }).start();
@@ -111,10 +199,15 @@ export function TaskRow({
     onLongPress();
   };
 
+  const handlePress = () => {
+    if (openRef.current) snapBack();
+    else onToggle();
+  };
+
   const done = item.status === 'done';
 
   return (
-    <View style={[styles.clip, { borderRadius: radius.md }]}>
+    <View style={[styles.clip, { borderRadius: radius.lg }]}>
       {/* Underlay: swipe-right complete */}
       <View style={[styles.underlay, styles.underlayLeft, { backgroundColor: theme.success }]}>
         <Check color="#fff" size={22} strokeWidth={2.5} />
@@ -147,10 +240,11 @@ export function TaskRow({
         </Pressable>
       </View>
 
-      <Animated.View
+      <RNAnimated.View
         {...panResponder.panHandlers}
         style={[
           styles.row,
+          shadow.sm,
           {
             backgroundColor: theme.surface,
             borderColor: overdue ? theme.danger : theme.border,
@@ -166,40 +260,51 @@ export function TaskRow({
           ]}
         />
         {isNext && <View style={[styles.nextBar, { backgroundColor: theme.accent }]} />}
+
+        {/* Checkbox */}
         <Pressable
-          onPress={() => {
-            if (openRef.current) snapBack();
-            else onToggle();
-          }}
+          onPress={handlePress}
+          onLongPress={handleLongPress}
+          delayLongPress={450}
+          onPressIn={checkPressIn}
+          onPressOut={checkPressOut}
+          style={styles.checkWrap}
+          hitSlop={6}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done }}
+          accessibilityLabel={item.title}
+        >
+          <Animated.View style={pressStyle}>
+            <AnimatedCheck checked={done} theme={theme} />
+          </Animated.View>
+        </Pressable>
+
+        {/* Main content */}
+        <Pressable
+          onPress={handlePress}
           onLongPress={handleLongPress}
           delayLongPress={450}
           style={styles.taskMain}
           hitSlop={2}
         >
           {isNext && <Text style={[styles.nextCaption, { color: theme.accent }]}>NEXT</Text>}
-          <View style={styles.taskLine}>
-            <Text style={[styles.mono, { color: overdue ? theme.danger : theme.textDim }]}>
-              {item.alarmTime ?? '--:--'}
-            </Text>
+          <Text
+            style={[
+              styles.body,
+              {
+                color: done ? theme.textFaint : theme.text,
+                textDecorationLine: done ? 'line-through' : 'none',
+              },
+            ]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+          <View style={styles.metaLine}>
             <View
               style={[styles.dot, { backgroundColor: categoryColor(categoryToken ?? 'slate') }]}
             />
-            <Text
-              style={[
-                styles.body,
-                {
-                  flex: 1,
-                  color: done ? theme.textFaint : theme.text,
-                  textDecorationLine: done ? 'line-through' : 'none',
-                },
-              ]}
-              numberOfLines={2}
-            >
-              {item.title}
-            </Text>
             <Text style={[styles.mono, { color: theme.textFaint }]}>{item.durationMin}m</Text>
-          </View>
-          <View style={styles.metaLine}>
             {overdue && (
               <View style={[styles.overdueBadge, { backgroundColor: theme.danger }]}>
                 <Text style={[styles.overdueText, { color: '#fff' }]}>Overdue</Text>
@@ -210,6 +315,20 @@ export function TaskRow({
             )}
           </View>
         </Pressable>
+
+        {/* Time, mono, right-aligned */}
+        <View style={styles.timeWrap}>
+          <Text
+            style={[
+              styles.mono,
+              styles.timeText,
+              { color: overdue ? theme.danger : theme.textDim },
+            ]}
+          >
+            {item.alarmTime ?? '--:--'}
+          </Text>
+        </View>
+
         {item.status === 'pending' && (
           <Pressable
             onPress={onSkip}
@@ -219,7 +338,7 @@ export function TaskRow({
             <Text style={[styles.small, { color: theme.textFaint }]}>Skip</Text>
           </Pressable>
         )}
-      </Animated.View>
+      </RNAnimated.View>
     </View>
   );
 }
@@ -248,7 +367,7 @@ const styles = StyleSheet.create({
   actionLabel: { ...type.caption, textTransform: 'uppercase' },
   row: {
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     flexDirection: 'row',
     alignItems: 'stretch',
     overflow: 'hidden',
@@ -256,20 +375,31 @@ const styles = StyleSheet.create({
   },
   priorityBar: { width: 4 },
   nextBar: { width: 3 },
+  checkWrap: {
+    justifyContent: 'center',
+    paddingLeft: space(1.5),
+    paddingRight: space(1),
+    minHeight: TAP,
+  },
   taskMain: {
     flex: 1,
     gap: space(0.5),
     minHeight: TAP,
     justifyContent: 'center',
-    padding: space(1.5),
+    paddingVertical: space(1.5),
   },
-  taskLine: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: space(1) },
   dot: { width: 8, height: 8, borderRadius: 4 },
   nextCaption: { ...type.caption },
   body: { ...type.body },
   small: { ...type.small },
   mono: { ...type.mono, fontVariant: ['tabular-nums'] },
+  timeWrap: {
+    justifyContent: 'center',
+    paddingRight: space(1.5),
+    paddingLeft: space(1),
+  },
+  timeText: { fontSize: 14 },
   overdueBadge: {
     borderRadius: radius.sm,
     paddingHorizontal: space(1),

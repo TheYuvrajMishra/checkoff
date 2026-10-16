@@ -677,7 +677,7 @@ function HourChart({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { paddingHorizontal: space(2), paddingBottom: space(4) },
+  scroll: { paddingHorizontal: space(2), paddingBottom: 128 },
   pageTitle: { ...type.h1, paddingVertical: space(2) },
   card: {
     borderRadius: radius.md,

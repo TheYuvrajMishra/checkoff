@@ -209,7 +209,7 @@ export default function CalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingHorizontal: space(2) },
+  root: { flex: 1, paddingHorizontal: space(2), paddingBottom: 128 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

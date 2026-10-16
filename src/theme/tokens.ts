@@ -1,6 +1,7 @@
 /**
- * CheckOff design tokens. STABLE — written by the coordinator, do not edit.
- * Dark-first. One accent. Desaturated category palette. 8pt grid.
+ * CheckOff design tokens. Phase 3 reskin (2026-10-16).
+ * Dark-first. Near-black base, layered surfaces. One sharp accent.
+ * Desaturated category palette. 8pt grid. 16-20pt radii.
  * No emoji anywhere in the UI. Tone: serious instrument.
  */
 
@@ -23,16 +24,16 @@ export interface ThemePalette {
 }
 
 export const dark: ThemePalette = {
-  bg: '#0B0D10',
-  surface: '#12161B',
-  surface2: '#1A2027',
-  border: '#242B33',
-  text: '#F2F4F6',
-  textDim: '#9AA3AD',
-  textFaint: '#5C6570',
-  accent: '#E0A83C',
-  accentDim: 'rgba(224, 168, 60, 0.14)',
-  onAccent: '#0B0D10',
+  bg: '#0A0A0B',
+  surface: '#131316',
+  surface2: '#1C1C21',
+  border: '#26262C',
+  text: '#F5F5F4',
+  textDim: '#A1A1AA',
+  textFaint: '#63636B',
+  accent: '#E8B93E',
+  accentDim: 'rgba(232, 185, 62, 0.14)',
+  onAccent: '#0A0A0B',
   danger: '#E5484D',
   warn: '#D97E36',
   success: '#4E9F6A',
@@ -85,21 +86,49 @@ export const type: Record<
   'display' | 'h1' | 'h2' | 'h3' | 'body' | 'small' | 'caption' | 'mono' | 'clock',
   TextStyle
 > = {
-  display: { fontSize: 34, lineHeight: 40, fontWeight: '700' },
-  h1: { fontSize: 24, lineHeight: 30, fontWeight: '700' },
+  display: { fontSize: 40, lineHeight: 48, fontWeight: '700' },
+  h1: { fontSize: 26, lineHeight: 32, fontWeight: '700' },
   h2: { fontSize: 18, lineHeight: 24, fontWeight: '600' },
   h3: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
   body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
   small: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
   caption: { fontSize: 11, lineHeight: 14, fontWeight: '500', letterSpacing: 0.8 },
   mono: { fontSize: 13, lineHeight: 18, fontWeight: '400', fontFamily: MONO },
-  clock: { fontSize: 44, lineHeight: 52, fontWeight: '600', fontFamily: MONO },
+  clock: { fontSize: 52, lineHeight: 60, fontWeight: '600', fontFamily: MONO },
 };
 
-export const radius = { sm: 8, md: 12, lg: 16 };
+export const radius = { sm: 8, md: 12, lg: 16, xl: 20 };
 
 /** 8pt grid. */
 export const space = (n: number): number => n * 8;
 
 /** Minimum tap target. */
 export const TAP = 48;
+
+/**
+ * Soft shadows. Android renders `elevation`; iOS props included for parity.
+ * Keep subtle — hairline borders do most of the separation work.
+ */
+export const shadow = {
+  sm: {
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  md: {
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  lg: {
+    elevation: 9,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+};
