@@ -8,6 +8,7 @@
 export type Recurrence = 'daily' | 'weekdays' | 'custom' | 'once';
 export type InstanceStatus = 'pending' | 'done' | 'skipped' | 'missed';
 export type TaskPriority = 'low' | 'medium' | 'high';
+export type Priority = TaskPriority;
 export type EventActor = 'user' | 'alarm' | 'auto' | 'system';
 export type TimerMode = 'countdown' | 'stopwatch';
 

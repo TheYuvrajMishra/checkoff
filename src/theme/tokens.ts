@@ -231,3 +231,9 @@ export const shadow = {
   },
 };
 
+export const MOTION = {
+  fast: 150,
+  normal: 180,
+  slow: 240,
+} as const;
+

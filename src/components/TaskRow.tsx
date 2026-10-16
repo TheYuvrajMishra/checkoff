@@ -30,7 +30,7 @@ import { CalendarDays, Check, Play, SkipForward } from 'lucide-react-native';
 import {
   categoryColor,
   HIT_SLOP,
-  motion,
+  MOTION,
   priorityRuleColor,
   radius,
   shadow,
@@ -80,11 +80,11 @@ export function AnimatedCheck({
 
   useEffect(() => {
     draw.value = withTiming(checked ? 1 : 0, {
-      duration: motion.normal,
+      duration: MOTION.normal,
       easing: Easing.out(Easing.cubic),
     });
     fill.value = withTiming(checked ? 1 : 0, {
-      duration: motion.fast,
+      duration: MOTION.fast,
       easing: Easing.out(Easing.cubic),
     });
   }, [checked, draw, fill]);
@@ -194,7 +194,7 @@ export function TaskRow({
     tickedLeft.current = false;
     RNAnimated.timing(translateX, {
       toValue: 0,
-      duration: motion.fast,
+      duration: MOTION.fast,
       useNativeDriver: true,
     }).start();
   };
@@ -233,7 +233,7 @@ export function TaskRow({
           openRef.current = true;
           RNAnimated.timing(translateX, {
             toValue: -ACTIONS_WIDTH,
-            duration: motion.fast,
+            duration: MOTION.fast,
             useNativeDriver: true,
           }).start();
         } else {
