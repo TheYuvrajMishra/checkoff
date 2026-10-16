@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,11 +23,13 @@ import Animated, {
 import Svg, { Circle } from 'react-native-svg';
 import {
   AlignLeft,
+  CalendarDays,
   CalendarPlus,
   Check,
   Clock,
   Play,
   Plus,
+  SkipForward,
   Sparkles,
 } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../../state/tasks';
@@ -46,12 +49,11 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab, FAB_CLEARANCE } from '../../components/Fab';
-import { MetallicText } from '../../components/MetallicText';
 import { PressableScale } from '../../components/PressableScale';
 import { Sheet } from '../../components/Sheet';
 import { Skeleton } from '../../components/Skeleton';
 import { TaskActionSheet } from '../../components/TaskActionSheet';
-import { AnimatedCheck, formatTimeDisplay, TaskRow } from '../../components/TaskRow';
+import { AnimatedCheck, formatTimeDisplay } from '../../components/TaskRow';
 import { createInstance, type TaskInstanceEx } from '../../db/repos/instances';
 import { createTemplate } from '../../db/repos/templates';
 import {
@@ -112,6 +114,19 @@ function countdownLabel(now: Date, alarmTime: string | null): string {
   return rem === 0 ? `IN ${hrs}H` : `IN ${hrs}H ${rem}M`;
 }
 
+function statusLabel(status: TaskInstance['status']): string {
+  switch (status) {
+    case 'done':
+      return 'COMPLETE';
+    case 'skipped':
+      return 'SKIPPED';
+    case 'missed':
+      return 'MISSED';
+    default:
+      return 'PENDING';
+  }
+}
+
 interface OnTimeStats {
   done: number;
   planned: number;
@@ -144,10 +159,11 @@ export default function TodayScreen() {
   const [editingInstance, setEditingInstance] = useState<TaskInstanceEx | null>(null);
   const [editSheetOpen, setEditSheetOpen] = useState(false);
 
-  // View mode & filters
+  // View mode & priority filter
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
-  const [filterCatId, setFilterCatId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<Priority | null>(null);
+  // Next-up card tab: 'up' = soonest, 'next' = the one after
+  const [nextTab, setNextTab] = useState<'up' | 'next'>('up');
 
   // Quick add
   const [quickTitle, setQuickTitle] = useState('');
@@ -273,7 +289,7 @@ export default function TodayScreen() {
     setQuickBusy(true);
     try {
       void haptics.check();
-      const catId = filterCatId ?? categories[0]?.id ?? null;
+      const catId = categories[0]?.id ?? null;
       const prio: Priority = filterPriority ?? 'medium';
       const tpl = await createTemplate(db, {
         title: clean,
@@ -303,7 +319,7 @@ export default function TodayScreen() {
     } finally {
       setQuickBusy(false);
     }
-  }, [quickTitle, quickBusy, filterCatId, filterPriority, categories, db, date, refresh]);
+  }, [quickTitle, quickBusy, filterPriority, categories, db, date, refresh]);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, k) => addDays(date, k - 3)),
@@ -315,11 +331,10 @@ export default function TodayScreen() {
 
   const filteredTasks = useMemo(() => {
     return allTasks.filter((t) => {
-      if (filterCatId && t.categoryId !== filterCatId) return false;
       if (filterPriority && (t.priority ?? 'medium') !== filterPriority) return false;
       return true;
     });
-  }, [allTasks, filterCatId, filterPriority]);
+  }, [allTasks, filterPriority]);
 
   const handleToggle = useCallback(
     async (item: TaskInstance) => {
@@ -358,9 +373,20 @@ export default function TodayScreen() {
 
   const nowHHMM = localTimeString(now);
   const todayStr = localDateString();
-  const pendingTasks = allTasks.filter((t) => t.status === 'pending');
-  const nextUp =
-    pendingTasks.find((t) => t.alarmTime && t.alarmTime >= nowHHMM) ?? pendingTasks[0] ?? null;
+
+  // Upcoming queue: pending tasks, those with alarm times first (sorted), then the rest
+  const upcoming = useMemo(() => {
+    const pending = allTasks.filter((t) => t.status === 'pending');
+    const timed = pending
+      .filter((t) => t.alarmTime)
+      .sort((a, b) => (a.alarmTime! >= nowHHMM ? 0 : 1) - (b.alarmTime! >= nowHHMM ? 0 : 1) || a.alarmTime!.localeCompare(b.alarmTime!));
+    const untimed = pending.filter((t) => !t.alarmTime);
+    return [...timed, ...untimed];
+  }, [allTasks, nowHHMM]);
+
+  const nextUp = upcoming[0] ?? null;
+  const nextAfter = upcoming[1] ?? null;
+  const displayedNext = nextTab === 'next' ? nextAfter ?? nextUp : nextUp;
 
   const isOverdue = useCallback(
     (t: TaskInstance) =>
@@ -387,15 +413,21 @@ export default function TodayScreen() {
     setEditSheetOpen(true);
   }, []);
 
-  const showNextCard = date === todayStr && nextUp !== null;
-  const statusLine =
-    onTime.planned === 0
-      ? 'No tasks scheduled today'
-      : `${onTime.done} of ${onTime.planned} done${
-          nextUp?.alarmTime
-            ? `, next at ${formatTimeDisplay(nextUp.alarmTime, clockFormat)}`
-            : ''
-        }`;
+  const showNextCard = date === todayStr && displayedNext !== null;
+
+  // Day progress
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const dayFrac = Math.min(1, Math.max(0, (now.getTime() - startOfDay.getTime()) / 86400000));
+  const dayPct = Math.round(dayFrac * 100);
+  const timeStr = now.toLocaleTimeString('en-GB', {
+    hour12: clockFormat === '12h',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const dateLabel = now.toLocaleDateString('en-GB', DATE_FMT).toUpperCase();
+  const doneLine = `${onTime.done} of ${onTime.planned} done`;
 
   // Group tasks for timeline view
   const timelineGroups = useMemo(() => {
@@ -423,6 +455,25 @@ export default function TodayScreen() {
 
   const ritualsDone = rituals.filter((r) => r.status === 'done').length;
 
+  const renderTaskCard = (t: TaskInstance, index: number) => (
+    <Animated.View
+      key={t.id}
+      entering={FadeInDown.duration(180).delay(Math.min(index * 30, 180))}
+      layout={LinearTransition.duration(180)}
+    >
+      <TodayTaskCard
+        item={t}
+        theme={theme}
+        clockFormat={clockFormat}
+        overdue={isOverdue(t)}
+        onToggle={() => handleToggle(t)}
+        onSkip={() => handleSkip(t.id)}
+        onReschedule={() => openReschedule(t)}
+        onLongPress={() => openMenu(t)}
+      />
+    </Animated.View>
+  );
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]} edges={['top']}>
       <ScrollView
@@ -430,15 +481,31 @@ export default function TodayScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Hero: Metallic live clock + thin day-progress arc + status */}
-        <DayHero
-          theme={theme}
-          now={now}
-          clockFormat={clockFormat}
-          statusLine={statusLine}
-        />
+        {/* 1 — Header row */}
+        <View style={styles.headerRow}>
+          <Text style={[styles.headerCaption, { color: theme.textFaint }]}>{dateLabel}</Text>
+          <Text style={[styles.headerCaption, { color: theme.textFaint }]}>DAY {dayPct}%</Text>
+        </View>
 
-        {/* 7-day week strip */}
+        {/* 2 — Big live clock + thin day-progress bar + done line */}
+        <Text
+          style={[styles.bigClock, { color: theme.text }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {timeStr}
+        </Text>
+        <View style={[styles.dayBarTrack, { backgroundColor: theme.surface3 }]}>
+          <View
+            style={[
+              styles.dayBarFill,
+              { width: `${Math.max(2, dayPct)}%`, backgroundColor: theme.text },
+            ]}
+          />
+        </View>
+        <Text style={[styles.doneLine, { color: theme.textDim }]}>{doneLine}</Text>
+
+        {/* 3 — Week strip */}
         <View style={styles.weekRow}>
           {weekDays.map((d) => {
             const selected = d === date;
@@ -452,12 +519,8 @@ export default function TodayScreen() {
                 innerStyle={[
                   styles.dayCell,
                   {
-                    backgroundColor: selected ? theme.accent : theme.surface,
-                    borderColor: selected
-                      ? theme.accent
-                      : isToday
-                      ? theme.borderStrong
-                      : theme.border,
+                    backgroundColor: selected ? theme.accent : 'transparent',
+                    borderLeftColor: theme.border,
                   },
                 ]}
               >
@@ -474,7 +537,13 @@ export default function TodayScreen() {
                 <Text
                   style={[
                     styles.dayNum,
-                    { color: selected ? theme.onAccent : theme.text },
+                    {
+                      color: selected
+                        ? theme.onAccent
+                        : isToday
+                        ? theme.text
+                        : theme.textDim,
+                    },
                   ]}
                   numberOfLines={1}
                 >
@@ -485,41 +554,109 @@ export default function TodayScreen() {
           })}
         </View>
 
-        {/* Progress Ring Card */}
-        <Card padding={2} style={styles.progressCard}>
+        {/* 4 — Today's Progress card */}
+        <View
+          style={[
+            styles.progressCard,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
           <View style={styles.progressRow}>
-            <ProgressRing theme={theme} done={onTime.done} planned={onTime.planned} />
+            <View style={styles.ringWrap}>
+              <ProgressRing theme={theme} done={onTime.done} planned={onTime.planned} />
+              <Text style={[styles.ringPct, { color: theme.textFaint }]}>
+                {onTime.planned > 0 ? Math.round((onTime.done / onTime.planned) * 100) : 0}%
+              </Text>
+            </View>
             <View style={styles.progressText}>
               <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
                 TODAY&apos;S PROGRESS
               </Text>
-              <MetallicText style={styles.progressHeading} numberOfLines={1}>
-                {`${onTime.done} of ${onTime.planned} done`}
-              </MetallicText>
-              <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={1}>
+              <Text style={[styles.progressHeading, { color: theme.text }]} numberOfLines={1}>
+                {doneLine}
+              </Text>
+              <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={2}>
                 {onTime.onTimePct === null
-                  ? 'Complete scheduled tasks to track on-time rate'
+                  ? 'Complete scheduled tasks to track on time rate'
                   : `${onTime.onTimePct}% completed within ${graceMin}m grace`}
               </Text>
             </View>
           </View>
-        </Card>
+        </View>
 
-        {/* Next-up card */}
-        {showNextCard && (
-          <NextUpCard
-            theme={theme}
-            item={nextUp}
-            clockFormat={clockFormat}
-            countdown={countdownLabel(now, nextUp.alarmTime)}
-            onStart={() =>
-              router.push({ pathname: '/timer', params: { instanceId: nextUp.id } })
-            }
-            onDone={() => handleToggle(nextUp)}
-          />
+        {/* 5 — Next Up card */}
+        {showNextCard && displayedNext && (
+          <View
+            style={[
+              styles.nextCard,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <View style={styles.nextTopRow}>
+              <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>NEXT UP</Text>
+              <View
+                style={[
+                  styles.upNextToggle,
+                  { backgroundColor: theme.surface2, borderColor: theme.border },
+                ]}
+              >
+                {(['up', 'next'] as const).map((tab) => {
+                  const active = nextTab === tab;
+                  return (
+                    <PressableScale
+                      key={tab}
+                      onPress={() => setNextTab(tab)}
+                      hitSlop={HIT_SLOP}
+                      innerStyle={[
+                        styles.upNextTab,
+                        active && { backgroundColor: theme.accent },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.upNextTabText,
+                          { color: active ? theme.onAccent : theme.textDim },
+                        ]}
+                      >
+                        {tab.toUpperCase()}
+                      </Text>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+            </View>
+            <Text style={[styles.nextTitle, { color: theme.text }]} numberOfLines={2}>
+              {displayedNext.title}
+            </Text>
+            <View style={styles.nextActions}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Start Timer"
+                  variant="primary"
+                  fullWidth
+                  icon={<Play color={theme.onAccent} size={15} strokeWidth={2.4} />}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/timer',
+                      params: { instanceId: displayedNext.id },
+                    })
+                  }
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Mark Done"
+                  variant="secondary"
+                  fullWidth
+                  icon={<Check color={theme.text} size={15} strokeWidth={2.5} />}
+                  onPress={() => handleToggle(displayedNext)}
+                />
+              </View>
+            </View>
+          </View>
         )}
 
-        {/* Morning Rituals block */}
+        {/* Rituals block */}
         {rituals.length > 0 && (
           <Card padding={2} elevated>
             <View style={styles.blockHeader}>
@@ -544,7 +681,7 @@ export default function TodayScreen() {
           </Card>
         )}
 
-        {/* Today's Creative Skill Slot */}
+        {/* Skill slot */}
         {slot && (slot.skill || slot.category) && (
           <Card padding={2} leftRuleColor={theme.accent}>
             <View style={styles.slotHeader}>
@@ -555,9 +692,9 @@ export default function TodayScreen() {
                     CREATIVE SKILL SLOT
                   </Text>
                 </View>
-                <MetallicText style={styles.slotName} numberOfLines={1}>
+                <Text style={[styles.h3, { color: theme.text }]} numberOfLines={1}>
                   {slot.skill ? slot.skill.name : 'No skill configured'}
-                </MetallicText>
+                </Text>
                 <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={1}>
                   {slot.category ? slot.category.name : 'General'}
                   {slot.skill ? ` · ${daysAgoLabel(slotLastTs, date)}` : ''}
@@ -590,7 +727,7 @@ export default function TodayScreen() {
           </Card>
         )}
 
-        {/* Quick-Add bar */}
+        {/* 6 — Quick-add */}
         <View
           style={[
             styles.quickAddWrap,
@@ -600,7 +737,7 @@ export default function TodayScreen() {
           <TextInput
             value={quickTitle}
             onChangeText={setQuickTitle}
-            placeholder="Quick-add task for this day…"
+            placeholder="Quick-add task for this day..."
             placeholderTextColor={theme.textFaint}
             returnKeyType="done"
             onSubmitEditing={handleQuickAdd}
@@ -628,9 +765,9 @@ export default function TodayScreen() {
           </PressableScale>
         </View>
 
-        {/* Tasks Header + List/Timeline Toggle */}
+        {/* 7 — Schedule header + List/Timeline toggle */}
         <View style={styles.tasksHeader}>
-          <MetallicText style={styles.sectionTitle}>SCHEDULE</MetallicText>
+          <Text style={[styles.sectionTitle, { color: theme.textDim }]}>SCHEDULE</Text>
           <View
             style={[
               styles.viewToggle,
@@ -690,21 +827,14 @@ export default function TodayScreen() {
           </View>
         </View>
 
-        {/* Category & Priority Filters */}
+        {/* 8 — Priority filter chips */}
         {allTasks.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterRow}
-          >
+          <View style={styles.filterRow}>
             <FilterChip
               label="All"
-              active={filterCatId === null && filterPriority === null}
+              active={filterPriority === null}
               theme={theme}
-              onPress={() => {
-                setFilterCatId(null);
-                setFilterPriority(null);
-              }}
+              onPress={() => setFilterPriority(null)}
             />
             {(['high', 'medium', 'low'] as Priority[]).map((p) => (
               <FilterChip
@@ -715,23 +845,14 @@ export default function TodayScreen() {
                 onPress={() => setFilterPriority(filterPriority === p ? null : p)}
               />
             ))}
-            {categories.map((c) => (
-              <FilterChip
-                key={c.id}
-                label={c.name}
-                active={filterCatId === c.id}
-                theme={theme}
-                onPress={() => setFilterCatId(filterCatId === c.id ? null : c.id)}
-              />
-            ))}
-          </ScrollView>
+          </View>
         )}
 
-        {/* Task List or Timeline */}
+        {/* 9 — Task list / timeline */}
         {loading ? (
           <View style={{ gap: space(1.25) }}>
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height={76} />
+              <Skeleton key={i} height={96} />
             ))}
           </View>
         ) : filteredTasks.length === 0 ? (
@@ -741,46 +862,17 @@ export default function TodayScreen() {
             subtitle={
               allTasks.length === 0
                 ? 'Start building your day with a timed task or morning ritual.'
-                : 'Clear your active category or priority filter to see all tasks.'
+                : 'Clear your active priority filter to see all tasks.'
             }
             actionLabel={allTasks.length === 0 ? 'New Task' : 'Reset Filters'}
             onAction={() => {
               if (allTasks.length === 0) setAddSheetOpen(true);
-              else {
-                setFilterCatId(null);
-                setFilterPriority(null);
-              }
+              else setFilterPriority(null);
             }}
           />
         ) : viewMode === 'list' ? (
           <View style={styles.taskList}>
-            {filteredTasks.map((t, index) => {
-              const cat = t.categoryId ? catMap.get(t.categoryId) : undefined;
-              return (
-                <Animated.View
-                  key={t.id}
-                  entering={FadeInDown.duration(180).delay(Math.min(index * 30, 180))}
-                  layout={LinearTransition.duration(180)}
-                >
-                  <TaskRow
-                    item={t}
-                    theme={theme}
-                    categoryToken={cat?.colorToken}
-                    categoryName={cat?.name}
-                    clockFormat={clockFormat}
-                    isNext={nextUp?.id === t.id}
-                    overdue={isOverdue(t)}
-                    onToggle={() => handleToggle(t)}
-                    onSkip={() => handleSkip(t.id)}
-                    onReschedule={() => openReschedule(t)}
-                    onLongPress={() => openMenu(t)}
-                    onStartTimer={() =>
-                      router.push({ pathname: '/timer', params: { instanceId: t.id } })
-                    }
-                  />
-                </Animated.View>
-              );
-            })}
+            {filteredTasks.map((t, index) => renderTaskCard(t, index))}
           </View>
         ) : (
           <View style={styles.timelineWrap}>
@@ -793,32 +885,7 @@ export default function TodayScreen() {
                   </Text>
                 </View>
                 <View style={[styles.timelineRail, { borderLeftColor: theme.borderStrong }]}>
-                  {group.items.map((t) => {
-                    const cat = t.categoryId ? catMap.get(t.categoryId) : undefined;
-                    return (
-                      <Animated.View
-                        key={t.id}
-                        layout={LinearTransition.duration(180)}
-                      >
-                        <TaskRow
-                          item={t}
-                          theme={theme}
-                          categoryToken={cat?.colorToken}
-                          categoryName={cat?.name}
-                          clockFormat={clockFormat}
-                          isNext={nextUp?.id === t.id}
-                          overdue={isOverdue(t)}
-                          onToggle={() => handleToggle(t)}
-                          onSkip={() => handleSkip(t.id)}
-                          onReschedule={() => openReschedule(t)}
-                          onLongPress={() => openMenu(t)}
-                          onStartTimer={() =>
-                            router.push({ pathname: '/timer', params: { instanceId: t.id } })
-                          }
-                        />
-                      </Animated.View>
-                    );
-                  })}
+                  {group.items.map((t, index) => renderTaskCard(t, index))}
                 </View>
               </View>
             ))}
@@ -904,7 +971,7 @@ function FilterChip({
       innerStyle={[
         styles.filterChip,
         {
-          backgroundColor: active ? theme.accent : theme.surface,
+          backgroundColor: active ? theme.accent : 'transparent',
           borderColor: active ? theme.accent : theme.border,
         },
       ]}
@@ -922,69 +989,147 @@ function FilterChip({
   );
 }
 
-function DayHero({
+/** Screenshot-style task card: status bar on top, checkbox row, SKIP/MOVE actions. */
+function TodayTaskCard({
+  item,
   theme,
-  now,
   clockFormat,
-  statusLine,
+  overdue,
+  onToggle,
+  onSkip,
+  onReschedule,
+  onLongPress,
 }: {
+  item: TaskInstance;
   theme: ThemePalette;
-  now: Date;
   clockFormat: '12h' | '24h';
-  statusLine: string;
+  overdue: boolean;
+  onToggle: () => void;
+  onSkip: () => void;
+  onReschedule: () => void;
+  onLongPress: () => void;
 }) {
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  const dayFrac = Math.min(1, Math.max(0, (now.getTime() - startOfDay.getTime()) / 86400000));
-  const dayPct = Math.round(dayFrac * 100);
-
-  const timeStr = now.toLocaleTimeString('en-GB', {
-    hour12: clockFormat === '12h',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  const done = item.status === 'done';
+  const prio = item.priority ?? 'medium';
+  const prioLabel = prio === 'high' ? 'HIGH' : prio === 'low' ? 'LOW' : 'MED';
 
   return (
-    <Card padding={2.5} elevated>
-      <View style={styles.heroTopRow}>
-        <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
-          {now.toLocaleDateString('en-GB', DATE_FMT).toUpperCase()}
-        </Text>
-        <Text style={[styles.monoSmall, { color: theme.textDim }]}>
-          DAY {dayPct}%
-        </Text>
-      </View>
-
-      <MetallicText
-        style={styles.heroClock}
-        numberOfLines={1}
-        adjustsFontSizeToFit
+    <View
+      style={[
+        styles.taskCard,
+        {
+          backgroundColor: theme.surface,
+          borderColor: overdue && !done ? theme.borderStrong : theme.border,
+        },
+      ]}
+    >
+      {/* Status bar */}
+      <View
+        style={[
+          styles.statusBar,
+          {
+            backgroundColor: done ? theme.accent : theme.surface2,
+            borderBottomColor: theme.border,
+          },
+        ]}
       >
-        {timeStr}
-      </MetallicText>
-
-      {/* Thin day-progress bar */}
-      <View style={[styles.dayBarTrack, { backgroundColor: theme.surface3 }]}>
-        <View
-          style={[
-            styles.dayBarFill,
-            {
-              width: `${Math.max(2, dayPct)}%`,
-              backgroundColor: theme.accent,
-            },
-          ]}
+        <Check
+          color={done ? theme.onAccent : theme.textDim}
+          size={13}
+          strokeWidth={2.5}
         />
+        <Text
+          style={[
+            styles.statusBarText,
+            { color: done ? theme.onAccent : theme.textDim },
+          ]}
+        >
+          {statusLabel(item.status)}
+        </Text>
       </View>
 
-      <Text
-        style={[styles.statusLine, { color: theme.textDim }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-      >
-        {statusLine}
-      </Text>
-    </Card>
+      <View style={styles.taskBody}>
+        {/* Checkbox */}
+        <Pressable
+          onPress={onToggle}
+          onLongPress={onLongPress}
+          delayLongPress={400}
+          style={styles.taskCheck}
+          hitSlop={HIT_SLOP}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done }}
+          accessibilityLabel={item.title}
+        >
+          <AnimatedCheck checked={done} theme={theme} />
+        </Pressable>
+
+        {/* Title + meta */}
+        <Pressable
+          onPress={onToggle}
+          onLongPress={onLongPress}
+          delayLongPress={400}
+          style={styles.taskMain}
+        >
+          <Text
+            style={[
+              styles.taskTitle,
+              {
+                color: done ? theme.textFaint : theme.text,
+                textDecorationLine: done ? 'line-through' : 'none',
+              },
+            ]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+          <View style={styles.taskMeta}>
+            <Clock color={theme.textFaint} size={12} strokeWidth={2} />
+            <Text style={[styles.taskMetaText, { color: theme.textFaint }]}>
+              {item.alarmTime ? formatTimeDisplay(item.alarmTime, clockFormat) : '--:--'}
+            </Text>
+            <Text style={[styles.taskMetaText, { color: theme.textFaint }]}>·</Text>
+            <Text style={[styles.taskMetaText, { color: theme.textFaint }]}>
+              {item.durationMin}m
+            </Text>
+            <Text style={[styles.taskMetaText, { color: theme.textFaint }]}>·</Text>
+            <View style={[styles.prioBadge, { borderColor: theme.border }]}>
+              <Text style={[styles.prioBadgeText, { color: theme.textDim }]}>
+                {prioLabel}
+              </Text>
+            </View>
+            {overdue && !done && (
+              <View style={[styles.lateBadge, { backgroundColor: theme.accent }]}>
+                <Text style={[styles.lateBadgeText, { color: theme.onAccent }]}>LATE</Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
+
+        {/* SKIP / MOVE actions */}
+        <View style={styles.taskActions}>
+          <PressableScale
+            onPress={onSkip}
+            hitSlop={HIT_SLOP}
+            innerStyle={styles.taskActionBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Skip task"
+          >
+            <SkipForward color={theme.textDim} size={16} strokeWidth={2} />
+            <Text style={[styles.taskActionLabel, { color: theme.textDim }]}>SKIP</Text>
+          </PressableScale>
+          <PressableScale
+            onPress={onReschedule}
+            hitSlop={HIT_SLOP}
+            innerStyle={styles.taskActionBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Move task"
+          >
+            <CalendarDays color={theme.textDim} size={16} strokeWidth={2} />
+            <Text style={[styles.taskActionLabel, { color: theme.textDim }]}>MOVE</Text>
+          </PressableScale>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -997,8 +1142,8 @@ function ProgressRing({
   done: number;
   planned: number;
 }) {
-  const size = 96;
-  const stroke = 7;
+  const size = 84;
+  const stroke = 8;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const frac = planned > 0 ? done / planned : 0;
@@ -1040,7 +1185,7 @@ function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={theme.accent}
+          stroke={theme.text}
           strokeWidth={stroke}
           fill="none"
           strokeDasharray={`${c}`}
@@ -1050,74 +1195,10 @@ function ProgressRing({
         />
       </Svg>
       <View style={styles.ringCenter}>
-        <MetallicText style={styles.ringNumber}>{`${displayDone}`}</MetallicText>
+        <Text style={[styles.ringNumber, { color: theme.text }]}>{`${displayDone}`}</Text>
         <Text style={[styles.ringSub, { color: theme.textFaint }]}>/{planned}</Text>
       </View>
     </View>
-  );
-}
-
-function NextUpCard({
-  theme,
-  item,
-  clockFormat,
-  countdown,
-  onStart,
-  onDone,
-}: {
-  theme: ThemePalette;
-  item: TaskInstance;
-  clockFormat: '12h' | '24h';
-  countdown: string;
-  onStart: () => void;
-  onDone: () => void;
-}) {
-  return (
-    <Card padding={2} elevated leftRuleColor={theme.accent}>
-      <View style={styles.nextCardTop}>
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={styles.nextHeaderLine}>
-            <Text style={[styles.sectionCaption, { color: theme.text }]}>NEXT UP</Text>
-            {item.alarmTime && (
-              <Text style={[styles.monoSmall, { color: theme.textDim }]}>
-                · {formatTimeDisplay(item.alarmTime, clockFormat)}
-              </Text>
-            )}
-          </View>
-          <Text style={[styles.h2, { color: theme.text }]} numberOfLines={2}>
-            {item.title}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.countdownPill,
-            { backgroundColor: theme.surface3, borderColor: theme.borderStrong },
-          ]}
-        >
-          <Text style={[styles.monoSmall, { color: theme.text }]}>{countdown}</Text>
-        </View>
-      </View>
-      <View style={styles.nextCardActions}>
-        <View style={{ flex: 1 }}>
-          <Button
-            label="Start Timer"
-            variant="primary"
-            fullWidth
-            icon={<Play color={theme.onAccent} size={15} strokeWidth={2.5} />}
-            onPress={onStart}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button
-            label="Mark Done"
-            variant="secondary"
-            fullWidth
-            icon={<Check color={theme.text} size={15} strokeWidth={2.5} />}
-            onPress={onDone}
-          />
-        </View>
-      </View>
-    </Card>
   );
 }
 
@@ -1172,45 +1253,56 @@ const styles = StyleSheet.create({
     paddingTop: space(1),
     gap: space(2),
   },
-  heroTopRow: {
+  // 1 — Header row
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: space(0.5),
+    marginTop: space(0.5),
   },
-  heroClock: {
+  headerCaption: {
+    ...type.caption,
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  // 2 — Big clock
+  bigClock: {
     ...type.clock,
-    fontSize: 44,
-    lineHeight: 52,
-    marginVertical: space(0.5),
+    fontSize: 64,
+    lineHeight: 72,
+    fontWeight: '700',
+    marginTop: space(1),
+    fontVariant: ['tabular-nums'],
   },
   dayBarTrack: {
     height: 3,
     borderRadius: 2,
     overflow: 'hidden',
-    marginVertical: space(1),
+    marginTop: space(1.5),
   },
   dayBarFill: {
     height: '100%',
     borderRadius: 2,
   },
-  statusLine: {
+  doneLine: {
     ...type.small,
+    marginTop: space(1),
   },
+  // 3 — Week strip
   weekRow: {
     flexDirection: 'row',
-    gap: 6,
+    marginTop: space(0.5),
   },
   dayCellWrap: {
     flex: 1,
   },
   dayCell: {
-    minHeight: TAP + 8,
+    minHeight: TAP + 4,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: space(1),
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderLeftWidth: 1,
     gap: 2,
   },
   dayDow: {
@@ -1220,14 +1312,28 @@ const styles = StyleSheet.create({
   },
   dayNum: {
     ...type.mono,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
   },
-  progressCard: {},
+  // 4 — Progress card
+  progressCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space(2),
+  },
   progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space(2),
+    gap: space(2.5),
+  },
+  ringWrap: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  ringPct: {
+    ...type.mono,
+    fontSize: 12,
+    fontWeight: '600',
   },
   progressText: {
     flex: 1,
@@ -1235,16 +1341,19 @@ const styles = StyleSheet.create({
   },
   progressHeading: {
     ...type.h2,
+    fontSize: 20,
+    lineHeight: 26,
   },
   ringCenter: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
   },
   ringNumber: {
     ...type.mono,
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: '700',
   },
   ringSub: {
@@ -1252,28 +1361,48 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 12,
   },
-  nextCardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+  // 5 — Next Up card
+  nextCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space(2),
     gap: space(1.5),
-    marginBottom: space(2),
   },
-  nextHeaderLine: {
+  nextTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
   },
-  countdownPill: {
-    borderRadius: radius.sm,
+  upNextToggle: {
+    flexDirection: 'row',
     borderWidth: 1,
-    paddingHorizontal: space(1.25),
-    paddingVertical: 6,
+    borderRadius: radius.md,
+    padding: 2,
+    gap: 2,
   },
-  nextCardActions: {
+  upNextTab: {
+    paddingHorizontal: space(1.5),
+    minHeight: 30,
+    borderRadius: radius.sm - 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upNextTabText: {
+    ...type.caption,
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  nextTitle: {
+    ...type.h2,
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  nextActions: {
     flexDirection: 'row',
     gap: space(1.25),
+    marginTop: space(0.5),
   },
+  // Rituals + skill slot
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1305,9 +1434,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  slotName: {
-    ...type.h3,
-  },
+  // 6 — Quick-add
   quickAddWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1332,11 +1459,12 @@ const styles = StyleSheet.create({
   quickBtnInner: {
     width: 36,
     height: 36,
-    borderRadius: radius.md,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // 7 — Schedule header
   tasksHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1372,15 +1500,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.4,
   },
+  // 8 — Filter chips
   filterRow: {
+    flexDirection: 'row',
     gap: space(1),
     paddingVertical: 2,
   },
   filterChip: {
     borderWidth: 1,
     borderRadius: radius.pill,
-    paddingHorizontal: space(1.75),
-    minHeight: 36,
+    paddingHorizontal: space(2),
+    minHeight: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1389,9 +1519,110 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.5,
   },
+  // 9 — Task cards
   taskList: {
-    gap: space(1.25),
+    gap: space(1.5),
   },
+  taskCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  statusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: space(2),
+    paddingVertical: space(1),
+    borderBottomWidth: 1,
+  },
+  statusBarText: {
+    ...type.caption,
+    fontSize: 10,
+    letterSpacing: 1.2,
+  },
+  taskBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space(1.5),
+    paddingLeft: space(1),
+    paddingRight: space(1.5),
+    gap: space(0.5),
+  },
+  taskCheck: {
+    width: TAP,
+    minHeight: TAP,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskMain: {
+    flex: 1,
+    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  taskTitle: {
+    ...type.body,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  taskMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  taskMetaText: {
+    ...type.mono,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  prioBadge: {
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  prioBadgeText: {
+    ...type.mono,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  lateBadge: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  lateBadgeText: {
+    ...type.caption,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  taskActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingLeft: space(1),
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(128,128,128,0.15)',
+  },
+  taskActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: space(1),
+    paddingVertical: 6,
+    minWidth: 52,
+  },
+  taskActionLabel: {
+    ...type.caption,
+    fontSize: 9,
+    letterSpacing: 0.8,
+  },
+  // Timeline
   timelineWrap: {
     gap: space(2),
   },
@@ -1412,7 +1643,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     marginLeft: 3.5,
     paddingLeft: space(1.75),
-    gap: space(1.25),
+    gap: space(1.5),
   },
   overrideRow: {},
   overrideRowInner: {
@@ -1424,7 +1655,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
   },
-  h2: { ...type.h2 },
+  h3: { ...type.h3 },
   body: { ...type.body },
   small: { ...type.small },
   monoSmall: {
