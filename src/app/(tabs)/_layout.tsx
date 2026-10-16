@@ -1,12 +1,13 @@
 /**
  * Floating monochrome bottom tab bar.
- * - Tabs in exact order: Today, Stats, Calendar, Settings.
+ * - Tabs in exact order: Today, Stats, Calendar, Rewards, Settings.
  * - Linear/eased 180ms indicator (zero bounce, zero overshoot).
  * - Lucide vector icons only (no emoji), 48dp minimum touch targets.
  * - Respects gesture-navigation bottom insets.
+ * - Rewards tab shows a small orange dot when a daily reward is claimable.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -16,21 +17,59 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarDays, ChartColumn, SlidersHorizontal, Sun } from 'lucide-react-native';
+import {
+  CalendarDays,
+  ChartColumn,
+  Gift,
+  SlidersHorizontal,
+  Sun,
+} from 'lucide-react-native';
 import { HIT_SLOP, radius, space, TAP, type, useTheme } from '../../theme/tokens';
 import { PressableScale } from '../../components/PressableScale';
+import { isDailyRewardClaimable } from '../../rewards/engine';
+import { useDb } from '../../db/useDb';
 
-const VISIBLE_TAB_ORDER = ['index', 'stats', 'calendar', 'settings'] as const;
+const VISIBLE_TAB_ORDER = ['index', 'stats', 'calendar', 'rewards', 'settings'] as const;
 
 const TAB_META: Record<
   string,
-  { label: string; Icon: typeof Sun }
+  { label: string; Icon: typeof Sun; badge?: 'claimable' }
 > = {
   index: { label: 'Today', Icon: Sun },
   stats: { label: 'Stats', Icon: ChartColumn },
   calendar: { label: 'Calendar', Icon: CalendarDays },
+  rewards: { label: 'Rewards', Icon: Gift, badge: 'claimable' },
   settings: { label: 'Settings', Icon: SlidersHorizontal },
 };
+
+const CLAIMABLE_POLL_MS = 60_000;
+
+function useClaimableBadge(): boolean {
+  const db = useDb();
+  const [claimable, setClaimable] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const v = await isDailyRewardClaimable(db);
+        if (mounted) setClaimable(v);
+      } catch {
+        // badge is best-effort
+      }
+    };
+    void check();
+    const timer = setInterval(check, CLAIMABLE_POLL_MS);
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void check();
+    });
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [db]);
+  return claimable;
+}
 
 interface TabBarProps {
   state: {
@@ -50,6 +89,7 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [innerWidth, setInnerWidth] = useState(0);
+  const claimable = useClaimableBadge();
 
   const visibleRoutes = useMemo(() => {
     const map = new Map(state.routes.map((r) => [r.name, r]));
@@ -69,7 +109,6 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
   const activePos = useSharedValue(activeVisibleIndex);
   useEffect(() => {
     // 180ms cubic ease-out, zero bounce, zero overshoot
-    // eslint-disable-next-line react-hooks/immutability
     activePos.value = withTiming(activeVisibleIndex, {
       duration: 180,
       easing: Easing.out(Easing.cubic),
@@ -163,7 +202,15 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
                   style={styles.tabWrap}
                   innerStyle={styles.tabInner}
                 >
-                  <Icon color={color} size={20} strokeWidth={focused ? 2.3 : 1.8} />
+                  <View style={styles.iconWrap}>
+                    <Icon color={color} size={20} strokeWidth={focused ? 2.3 : 1.8} />
+                    {meta.badge === 'claimable' && claimable && (
+                      <View
+                        style={styles.badgeDot}
+                        accessibilityLabel="Daily reward claimable"
+                      />
+                    )}
+                  </View>
                   <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
@@ -197,6 +244,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Today' }} />
       <Tabs.Screen name="stats" options={{ title: 'Stats' }} />
       <Tabs.Screen name="calendar" options={{ title: 'Calendar' }} />
+      <Tabs.Screen name="rewards" options={{ title: 'Rewards' }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
       <Tabs.Screen name="log" options={{ href: null, title: 'Logs' }} />
     </Tabs>
@@ -268,5 +316,19 @@ const styles = StyleSheet.create({
     fontSize: type.caption.fontSize,
     lineHeight: 14,
     letterSpacing: 0.3,
+  },
+  iconWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: -2,
+    right: -8,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#F97316',
   },
 });

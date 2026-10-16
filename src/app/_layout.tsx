@@ -28,6 +28,10 @@ import {
   rescheduleAllAlarms,
   processMissedAlarms,
 } from '../notifications';
+import {
+  loadRewardNotifPrefs,
+  rescheduleRewardNotifications,
+} from '../notifications/rewards';
 import { reconcileTimers } from '../timers';
 import { configureHaptics } from '../haptics';
 import { UpdateBanner } from '../updates/UpdateBanner';
@@ -71,6 +75,11 @@ async function runStartupTasks(db: SQLiteDatabase): Promise<void> {
   } catch (e) {
     console.error('[bootstrap] timer reconcile failed', e);
   }
+  try {
+    await rescheduleRewardNotifications(db);
+  } catch (e) {
+    console.error('[bootstrap] reward notification reschedule failed', e);
+  }
 }
 
 function Bootstrap({ children }: { children: React.ReactNode }) {
@@ -97,6 +106,7 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
         clockFormat,
         weekStart,
         alarmSound,
+        rewardPrefs,
       ] = await Promise.all([
         getMeta(db, META_KEYS.onboarded),
         getMeta(db, META_KEYS.theme),
@@ -107,6 +117,7 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
         getMeta(db, 'clock_format'),
         getMeta(db, 'week_start'),
         getMeta(db, 'alarm_sound'),
+        loadRewardNotifPrefs(db),
       ]);
 
       const themeMode: ThemeMode =
@@ -132,6 +143,14 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
         ).includes(alarmSound as AlarmSoundId)
           ? (alarmSound as AlarmSoundId)
           : ('pulse' as AlarmSoundId),
+        rewardStreakAlerts: rewardPrefs.streakAlerts,
+        rewardDailyNudge: rewardPrefs.dailyNudge,
+        rewardNudgeTime: rewardPrefs.nudgeTime,
+        rewardAffordableAlerts: rewardPrefs.affordableAlerts,
+        rewardLevelUp: rewardPrefs.levelUp,
+        rewardWeeklyReview: rewardPrefs.weeklyReview,
+        rewardQuietStart: rewardPrefs.quietStart,
+        rewardQuietEnd: rewardPrefs.quietEnd,
         hydrated: true,
       };
       useUiStore.getState().set(ui);

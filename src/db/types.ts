@@ -29,7 +29,9 @@ export type LogEventType =
   | 'exported'
   | 'streak_milestone'
   | 'timer_session_started'
-  | 'timer_session_ended';
+  | 'timer_session_ended'
+  | 'reward_redeemed'
+  | 'daily_reward_claimed';
 
 export interface Category {
   id: string;
@@ -111,4 +113,59 @@ export interface TimerSession {
   startedAtUtc: string;
   endedAtUtc: string | null;
   createdAt: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Rewards (v4). The SQLite DB is the source of truth; these mirror the */
+/* tables 1:1. Ledger points are signed integers; balance = SUM(points). */
+/* ------------------------------------------------------------------ */
+
+export type LedgerKind = 'earn' | 'spend' | 'reversal';
+
+export interface RewardLedgerRow {
+  id: string;
+  tsUtc: string;
+  kind: LedgerKind;
+  /** Signed point delta. */
+  points: number;
+  reason: string;
+  /** Idempotency key — one earn row per source action. NULL allowed but never written NULL. */
+  sourceEventId: string | null;
+  /** Denormalized for per-template daily caps. NULL for non-task earns. */
+  templateId: string | null;
+  balanceAfter: number;
+}
+
+export interface DailyRewardClaim {
+  id: string;
+  /** Local calendar day claimed, YYYY-MM-DD. */
+  date: string;
+  /** Position in the 1..7 claim streak at claim time. */
+  dayNumber: number;
+  claimedAtUtc: string;
+  pointsAwarded: number;
+}
+
+export interface UserReward {
+  id: string;
+  name: string;
+  cost: number;
+  createdAtUtc: string;
+  redeemedCount: number;
+}
+
+export interface Badge {
+  id: string;
+  badgeKey: string;
+  name: string;
+  description: string;
+  earnedAtUtc: string;
+}
+
+export interface StreakFreeze {
+  id: string;
+  earnedAtUtc: string;
+  consumedAtUtc: string | null;
+  /** Local date this freeze absorbed (a missed day), or NULL. */
+  absorbedDate: string | null;
 }

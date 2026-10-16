@@ -8,7 +8,7 @@
  *   no update/delete API at all).
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export interface Migration {
   version: number;
@@ -99,6 +99,62 @@ CREATE TABLE IF NOT EXISTS timer_sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_instance ON timer_sessions(task_instance_id);
 `;
 
+const V4 = `
+-- Append-only points ledger. Every earn/spend/reversal is a row;
+-- balance is always SUM(points). source_event_id is the idempotency key
+-- (INSERT OR IGNORE) so reward evaluation can safely re-run.
+CREATE TABLE IF NOT EXISTS reward_ledger (
+  id TEXT PRIMARY KEY,
+  ts_utc TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('earn','spend','reversal')),
+  points INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  source_event_id TEXT UNIQUE,
+  template_id TEXT REFERENCES task_templates(id) ON DELETE SET NULL,
+  balance_after INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_ts ON reward_ledger(ts_utc);
+CREATE INDEX IF NOT EXISTS idx_ledger_template ON reward_ledger(template_id, ts_utc);
+
+-- One row per claimed daily-reward day (local date). Unclaimed days expire.
+CREATE TABLE IF NOT EXISTS daily_reward_claims (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL UNIQUE,
+  day_number INTEGER NOT NULL CHECK (day_number BETWEEN 1 AND 7),
+  claimed_at_utc TEXT NOT NULL,
+  points_awarded INTEGER NOT NULL
+);
+
+-- User-defined rewards redeemable with points.
+CREATE TABLE IF NOT EXISTS user_rewards (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  cost INTEGER NOT NULL CHECK (cost > 0),
+  created_at_utc TEXT NOT NULL,
+  redeemed_count INTEGER NOT NULL DEFAULT 0
+);
+
+-- Earned achievement badges, keyed by stable badge_key.
+CREATE TABLE IF NOT EXISTS badges (
+  id TEXT PRIMARY KEY,
+  badge_key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  earned_at_utc TEXT NOT NULL
+);
+
+-- Streak freezes. A freeze absorbs one missed day; consumed_at_utc marks
+-- use and absorbed_date records which local day it covered (idempotent
+-- lazy consumption during streak evaluation).
+CREATE TABLE IF NOT EXISTS streak_freezes (
+  id TEXT PRIMARY KEY,
+  earned_at_utc TEXT NOT NULL,
+  consumed_at_utc TEXT NULL,
+  absorbed_date TEXT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_freezes_absorbed ON streak_freezes(absorbed_date);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, description: 'Initial schema: categories, skills, templates, instances, append-only log, timer sessions', sql: V1 },
   {
@@ -120,5 +176,10 @@ ALTER TABLE task_instances ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'
 ALTER TABLE task_instances ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_instances_deleted ON task_instances(date, deleted);
 `,
+  },
+  {
+    version: 4,
+    description: 'Rewards/points engine: ledger, daily reward claims, user rewards, badges, streak freezes',
+    sql: V4,
   },
 ];

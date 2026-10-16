@@ -57,7 +57,12 @@ import { Card } from '../components/Card';
 import { Switch } from '../components/Switch';
 import { Slider } from '../components/Slider';
 import { Button } from '../components/Button';
+import { NativeTimeButton } from '../components/TaskForm';
 import { FAB_CLEARANCE } from '../components/Fab';
+import {
+  rescheduleRewardNotifications,
+  saveRewardNotifPrefs,
+} from '../notifications/rewards';
 import pkg from '../../package.json';
 
 const GRACE_DETENTS = [5, 10, 15, 20, 30, 45, 60];
@@ -154,6 +159,61 @@ export default function SettingsScreen() {
     ui.set({ snoozeMin: min });
     void persist(META_KEYS.snoozeMin, String(min));
   };
+
+  // --- Reward notification prefs (persisted via notifications/rewards) ---
+
+  const persistRewardPrefs = useCallback(
+    async (patch: Parameters<typeof saveRewardNotifPrefs>[1]) => {
+      try {
+        await saveRewardNotifPrefs(db, patch);
+      } catch {
+        // UI store already updated
+      }
+      try {
+        await rescheduleRewardNotifications(db);
+      } catch {
+        // rescheduling is best-effort
+      }
+    },
+    [db]
+  );
+
+  const setRewardToggle = (
+    key:
+      | 'streakAlerts'
+      | 'dailyNudge'
+      | 'affordableAlerts'
+      | 'levelUp'
+      | 'weeklyReview',
+    value: boolean
+  ) => {
+    haptics.selection();
+    ui.setRewardNotif({ [key]: value });
+    void persistRewardPrefs({ [key]: value });
+  };
+
+  const setRewardTime = (
+    key: 'nudgeTime' | 'quietStart' | 'quietEnd',
+    value: string
+  ) => {
+    haptics.selection();
+    ui.setRewardNotif({ [key]: value });
+    void persistRewardPrefs({ [key]: value });
+  };
+
+  const splitTime = (hhmm: string): { h: number; m: number } => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return {
+      h: Number.isFinite(h) ? h : 0,
+      m: Number.isFinite(m) ? m : 0,
+    };
+  };
+  const toHHMM = (h: number, m: number): string =>
+    `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+  const nudge = splitTime(ui.rewardNudgeTime);
+  const quietStart = splitTime(ui.rewardQuietStart);
+  const quietEnd = splitTime(ui.rewardQuietEnd);
 
   const stopPreview = useCallback(() => {
     if (previewTimerRef.current) {
@@ -599,6 +659,162 @@ export default function SettingsScreen() {
           />
         </Card>
 
+        {/* Reward Notifications */}
+        <Card palette={palette} padding="md">
+          <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
+            REWARD NOTIFICATIONS
+          </Text>
+
+          <View style={styles.rewardHeadRow}>
+            <Bell size={16} color={palette.textSecondary} />
+            <Text style={[styles.rewardHeadText, { color: palette.textSecondary }]}>
+              Max 3 per day. Never inside quiet hours. Separate low-priority
+              channel from alarms.
+            </Text>
+          </View>
+
+          <View style={styles.inlineRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+                Streak At Risk
+              </Text>
+              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+                2h before day end when your streak is 3+ days and today&apos;s
+                goal is unmet
+              </Text>
+            </View>
+            <Switch
+              value={ui.rewardStreakAlerts}
+              onValueChange={(v) => setRewardToggle('streakAlerts', v)}
+              palette={palette}
+              accessibilityLabel="Toggle streak at risk alerts"
+            />
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          <View style={styles.inlineRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+                Daily Reward Nudge
+              </Text>
+              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+                Remind me to claim an earned daily reward
+              </Text>
+            </View>
+            <Switch
+              value={ui.rewardDailyNudge}
+              onValueChange={(v) => setRewardToggle('dailyNudge', v)}
+              palette={palette}
+              accessibilityLabel="Toggle daily reward nudge"
+            />
+          </View>
+
+          <View style={styles.rewardTimeRow}>
+            <Text style={[styles.rowLabel, { color: palette.textSecondary }]}>
+              Nudge time
+            </Text>
+            <View
+              style={!ui.rewardDailyNudge && { opacity: 0.4 }}
+              pointerEvents={ui.rewardDailyNudge ? 'auto' : 'none'}
+            >
+              <NativeTimeButton
+                theme={palette}
+                hour={nudge.h}
+                minute={nudge.m}
+                onChange={(h, m) => setRewardTime('nudgeTime', toHHMM(h, m))}
+              />
+            </View>
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          <View style={styles.inlineRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+                Reward Affordable
+              </Text>
+              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+                Alert once when your balance first reaches a reward&apos;s cost
+              </Text>
+            </View>
+            <Switch
+              value={ui.rewardAffordableAlerts}
+              onValueChange={(v) => setRewardToggle('affordableAlerts', v)}
+              palette={palette}
+              accessibilityLabel="Toggle reward affordable alerts"
+            />
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          <View style={styles.inlineRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+                Level Up
+              </Text>
+              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+                Celebrate when you reach a new level
+              </Text>
+            </View>
+            <Switch
+              value={ui.rewardLevelUp}
+              onValueChange={(v) => setRewardToggle('levelUp', v)}
+              palette={palette}
+              accessibilityLabel="Toggle level up notifications"
+            />
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          <View style={styles.inlineRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+                Weekly Review
+              </Text>
+              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+                Sunday 19:00 recap of streaks, focus, and badges
+              </Text>
+            </View>
+            <Switch
+              value={ui.rewardWeeklyReview}
+              onValueChange={(v) => setRewardToggle('weeklyReview', v)}
+              palette={palette}
+              accessibilityLabel="Toggle weekly review notifications"
+            />
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          <View style={styles.rewardTimeRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: palette.textPrimary }]}>
+                Quiet Hours
+              </Text>
+              <Text style={[styles.rowHint, { color: palette.textMuted }]}>
+                No reward notifications between these times
+              </Text>
+            </View>
+            <View style={styles.quietRow}>
+              <NativeTimeButton
+                theme={palette}
+                hour={quietStart.h}
+                minute={quietStart.m}
+                onChange={(h, m) => setRewardTime('quietStart', toHHMM(h, m))}
+              />
+              <Text style={[styles.quietDash, { color: palette.textMuted }]}>
+                –
+              </Text>
+              <NativeTimeButton
+                theme={palette}
+                hour={quietEnd.h}
+                minute={quietEnd.m}
+                onChange={(h, m) => setRewardTime('quietEnd', toHHMM(h, m))}
+              />
+            </View>
+          </View>
+        </Card>
+
         {/* Tactile Haptics */}
         <Card palette={palette} padding="md">
           <Text style={[styles.sectionHeader, { color: palette.textMuted }]}>
@@ -891,6 +1107,32 @@ const styles = StyleSheet.create({
   },
   backupActions: {
     marginTop: space.xs,
+  },
+  rewardHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  rewardHeadText: {
+    ...type.caption,
+    flex: 1,
+  },
+  rewardTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    marginTop: space.md,
+    minHeight: 48,
+  },
+  quietRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  quietDash: {
+    ...type.body,
   },
   privacyRow: {
     flexDirection: 'row',

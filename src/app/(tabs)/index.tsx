@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,23 +15,29 @@ import Animated, {
   Easing,
   FadeInDown,
   LinearTransition,
-  runOnJS,
   useAnimatedProps,
-  useAnimatedReaction,
+  useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
-  AlignLeft,
-  CalendarDays,
+  BarChart3,
   CalendarPlus,
   Check,
+  ChevronRight,
   Clock,
+  Flame,
+  Gift,
+  List,
+  MoreVertical,
   Play,
   Plus,
-  SkipForward,
-  Sparkles,
+  Rows3,
+  Send,
+  Star,
+  Target,
 } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../../state/tasks';
 import { useUiStore } from '../../state/ui';
@@ -45,15 +52,12 @@ import {
   type ThemePalette,
 } from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
-import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab, FAB_CLEARANCE } from '../../components/Fab';
 import { PressableScale } from '../../components/PressableScale';
-import { Sheet } from '../../components/Sheet';
 import { Skeleton } from '../../components/Skeleton';
 import { TaskActionSheet } from '../../components/TaskActionSheet';
-import { AnimatedCheck, formatTimeDisplay } from '../../components/TaskRow';
+import { formatTimeDisplay } from '../../components/TaskRow';
 import { createInstance, type TaskInstanceEx } from '../../db/repos/instances';
 import { createTemplate } from '../../db/repos/templates';
 import {
@@ -62,75 +66,109 @@ import {
   localTimeString,
 } from '../../db/time';
 import { ensureInstancesForDate, markPastDueMissed } from '../../tasks/recurrence';
-import { todaysSkillSlot, overrideSkillSlot, type SkillSlot } from '../../tasks/rotation';
 import { getLogEvents } from '../../db/log';
-import { lastPracticedAt, listSkills } from '../../db/repos/skills';
 import { listCategories } from '../../db/repos/categories';
+import { instancesInRange, sessionsInRange } from '../../stats/queries';
 import { haptics } from '../../haptics';
-import type { Category, Priority, Skill, TaskInstance } from '../../db/types';
+import {
+  claimDailyReward,
+  getBalance,
+  getDailyRewardState,
+  type DailyRewardState,
+} from '../../rewards/engine';
+import type { Category, Priority, TaskInstance } from '../../db/types';
 
 const AnimatedCircle = createAnimatedComponent(Circle);
 
-const DATE_FMT: Intl.DateTimeFormatOptions = {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-};
+/** Mockup accent — warm orange used for hero-adjacent highlights, ring, dots. */
+const ORANGE = '#F97316';
+const ORANGE_DEEP = '#EA580C';
+const ORANGE_SOFT = '#FB923C';
+const ORANGE_PALE = 'rgba(249, 115, 22, 0.14)';
+
+type HeroKey = 'dawn' | 'day' | 'dusk' | 'night';
+
+/**
+ * Static requires must be literal, so each hero variant gets its own call.
+ * The try/catch keeps the screen alive if a file is ever deleted; the
+ * placeholders in src/assets/ currently stand in for the real artwork —
+ * replace them with the real hero-dawn/day/dusk/night.webp exports.
+ */
+function heroSourceForKey(key: HeroKey): number | null {
+  try {
+    switch (key) {
+      case 'dawn':
+        return require('../../assets/hero-dawn.webp');
+      case 'day':
+        return require('../../assets/hero-day.webp');
+      case 'dusk':
+        return require('../../assets/hero-dusk.webp');
+      case 'night':
+      default:
+        return require('../../assets/hero-night.webp');
+    }
+  } catch {
+    return null;
+  }
+}
+
+function nextupSource(): number | null {
+  try {
+    return require('../../assets/nextup-backdrop.webp');
+  } catch {
+    return null;
+  }
+}
+
+function heroKeyForHour(h: number): HeroKey {
+  if (h >= 5 && h < 8) return 'dawn';
+  if (h >= 8 && h < 17) return 'day';
+  if (h >= 17 && h < 20) return 'dusk';
+  return 'night';
+}
+
+function greetingForHour(h: number): string {
+  if (h >= 5 && h < 12) return 'Good morning,';
+  if (h >= 12 && h < 17) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
+const REWARD_DAYS = ['Day 1', 'Day 2', 'Day 3', 'Day 5', 'Day 7'];
 
 function weekdayShort(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short' });
+  return new Date(y, m - 1, d)
+    .toLocaleDateString('en-GB', { weekday: 'short' })
+    .toUpperCase();
 }
 
 function dayNum(dateStr: string): string {
   return String(Number(dateStr.split('-')[2]));
 }
 
-function daysAgoLabel(lastTs: string | null, today: string): string {
-  if (!lastTs) return 'Not yet practiced';
-  const lastDay = lastTs.slice(0, 10);
-  const [ty, tm, td] = today.split('-').map(Number);
-  const [ly, lm, ld] = lastDay.split('-').map(Number);
-  const diff = Math.round(
-    (Date.UTC(ty, tm - 1, td) - Date.UTC(ly, lm - 1, ld)) / 86400000
-  );
-  if (diff <= 0) return 'Practiced today';
-  if (diff === 1) return 'Practiced yesterday';
-  return `Practiced ${diff}d ago`;
+function priorityDotColor(p: Priority): string {
+  if (p === 'high') return '#EF4444';
+  if (p === 'low') return '#22C55E';
+  return ORANGE;
 }
 
-function countdownLabel(now: Date, alarmTime: string | null): string {
-  if (!alarmTime) return 'UP NEXT';
-  const [h, m] = alarmTime.split(':').map(Number);
-  const target = new Date(now);
-  target.setHours(h, m, 0, 0);
-  const diffMs = target.getTime() - now.getTime();
-  if (diffMs <= 0) return 'DUE NOW';
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return `IN ${mins}M`;
-  const hrs = Math.floor(mins / 60);
-  const rem = mins % 60;
-  return rem === 0 ? `IN ${hrs}H` : `IN ${hrs}H ${rem}M`;
+function priorityLabel(p: Priority): string {
+  return p === 'high' ? 'HIGH' : p === 'low' ? 'LOW' : 'MED';
 }
 
-function statusLabel(status: TaskInstance['status']): string {
-  switch (status) {
-    case 'done':
-      return 'COMPLETE';
-    case 'skipped':
-      return 'SKIPPED';
-    case 'missed':
-      return 'MISSED';
-    default:
-      return 'PENDING';
-  }
-}
+type TaskFilter = 'all' | Priority | 'completed';
 
 interface OnTimeStats {
   done: number;
   planned: number;
   onTimePct: number | null;
+}
+
+interface HeaderStats {
+  streak: number;
+  focusMin: number;
+  points: number;
+  dayCounts: Record<string, number>;
 }
 
 export default function TodayScreen() {
@@ -144,40 +182,60 @@ export default function TodayScreen() {
   const refresh = useTasksStore((s) => s.refresh);
   const setDate = useTasksStore((s) => s.setDate);
   const toggleDone = useTasksStore((s) => s.toggleDone);
-  const skipTask = useTasksStore((s) => s.skipTask);
 
   const [now, setNow] = useState(() => new Date());
-  const [slot, setSlot] = useState<SkillSlot | null>(null);
-  const [slotLastTs, setSlotLastTs] = useState<string | null>(null);
-  const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overrideSkills, setOverrideSkills] = useState<Skill[]>([]);
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [onTime, setOnTime] = useState<OnTimeStats>({ done: 0, planned: 0, onTimePct: null });
+  const [header, setHeader] = useState<HeaderStats>({
+    streak: 0,
+    focusMin: 0,
+    points: 0,
+    dayCounts: {},
+  });
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [menuInstance, setMenuInstance] = useState<TaskInstance | null>(null);
   const [menuInitialView, setMenuInitialView] = useState<'menu' | 'reschedule'>('menu');
   const [editingInstance, setEditingInstance] = useState<TaskInstanceEx | null>(null);
   const [editSheetOpen, setEditSheetOpen] = useState(false);
 
-  // View mode & priority filter
+  // View mode & filter
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
-  const [filterPriority, setFilterPriority] = useState<Priority | null>(null);
-  // Next-up card tab: 'up' = soonest, 'next' = the one after
-  const [nextTab, setNextTab] = useState<'up' | 'next'>('up');
+  const [filter, setFilter] = useState<TaskFilter>('all');
 
   // Quick add
   const [quickTitle, setQuickTitle] = useState('');
   const [quickBusy, setQuickBusy] = useState(false);
 
+  // Daily reward state from the real rewards engine.
+  const [rewardState, setRewardState] = useState<DailyRewardState | null>(null);
+  // Shown day numbers on the 5-gift strip (mockup omits Day 4 and Day 6).
+  const SHOWN_DAYS = [1, 2, 3, 5, 7];
+  const claimableIndex = (() => {
+    const day = rewardState?.currentDay ?? 1;
+    const exact = SHOWN_DAYS.indexOf(day);
+    if (exact !== -1) return exact;
+    const next = SHOWN_DAYS.findIndex((d) => d > day);
+    return next !== -1 ? next : SHOWN_DAYS.length - 1;
+  })();
+  const rewardClaimed = SHOWN_DAYS.map((d) => {
+    const day = rewardState?.currentDay ?? 1;
+    if (d < day) return true;
+    if (d === day) return rewardState?.claimed ?? false;
+    return false;
+  });
+  const rewardClaimable = (rewardState?.earned ?? false) && !(rewardState?.claimed ?? true);
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
-
-  const catMap = useMemo(
-    () => new Map(categories.map((c) => [c.id, c])),
-    [categories]
-  );
 
   const syncDay = useCallback(
     async (target?: string) => {
@@ -187,9 +245,6 @@ export default function TodayScreen() {
         await markPastDueMissed(db, today);
         await ensureInstancesForDate(db, d);
         await refresh(d);
-        const s = await todaysSkillSlot(db, d);
-        setSlot(s);
-        setSlotLastTs(s.skill ? await lastPracticedAt(db, s.skill.id) : null);
         const cats = await listCategories(db);
         setCategories(cats);
       } catch (e) {
@@ -212,6 +267,7 @@ export default function TodayScreen() {
     }, [syncDay])
   );
 
+  // On-time completion stats for the viewed day (drives the progress card).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -257,31 +313,108 @@ export default function TodayScreen() {
     };
   }, [db, date, instances, graceMin]);
 
-  const openOverridePicker = useCallback(async () => {
-    if (!slot?.category) return;
-    try {
-      const all = await listSkills(db, slot.category.id);
-      setOverrideSkills(all);
-      setOverrideOpen(true);
-    } catch (e) {
-      console.error('[today] override picker failed', e);
-    }
-  }, [db, slot]);
-
-  const applyOverride = useCallback(
-    async (skillId: string) => {
-      try {
-        await overrideSkillSlot(db, date, skillId);
-        const s = await todaysSkillSlot(db, date);
-        setSlot(s);
-        setSlotLastTs(s.skill ? await lastPracticedAt(db, s.skill.id) : null);
-        setOverrideOpen(false);
-      } catch (e) {
-        console.error('[today] override failed', e);
-      }
-    },
-    [db, date]
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, k) => addDays(date, k - 3)),
+    [date]
   );
+
+  // Header stats: week-strip dots, streak, focus minutes, total points.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const today = localDateString();
+
+        const placeholders = weekDays.map(() => '?').join(',');
+        const countRows = await db.getAllAsync<{ date: string; c: number }>(
+          `SELECT date, COUNT(*) AS c FROM task_instances
+           WHERE date IN (${placeholders}) AND deleted = 0 GROUP BY date`,
+          ...weekDays
+        );
+
+        // Day streak = consecutive ritual-perfect days (same definition as Stats).
+        const all = await instancesInRange(db, addDays(today, -365), today);
+        const byDay = new Map<string, { rituals: number; done: number; failed: number }>();
+        for (const inst of all) {
+          if (!inst.isRitual) continue;
+          const cur = byDay.get(inst.date) ?? { rituals: 0, done: 0, failed: 0 };
+          cur.rituals += 1;
+          if (inst.status === 'done') cur.done += 1;
+          else cur.failed += 1;
+          byDay.set(inst.date, cur);
+        }
+        const isStreakDay = (d?: { rituals: number; done: number; failed: number }) =>
+          Boolean(d && d.rituals > 0 && d.failed === 0 && d.done === d.rituals);
+        const startOffset = isStreakDay(byDay.get(today)) ? 0 : -1;
+        let streak = 0;
+        for (let i = startOffset; i >= -365; i--) {
+          if (isStreakDay(byDay.get(addDays(today, i)))) streak += 1;
+          else break;
+        }
+
+        // Focus minutes for the viewed day from timer sessions.
+        const [y, m, d] = date.split('-').map(Number);
+        const fromUtc = new Date(y, m - 1, d, 0, 0, 0).toISOString();
+        const toUtc = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+        const sessions = await sessionsInRange(db, fromUtc, toUtc);
+        let focusMin = 0;
+        for (const s of sessions) {
+          if (!s.endedAtUtc) continue;
+          const ms =
+            new Date(s.endedAtUtc).getTime() - new Date(s.startedAtUtc).getTime();
+          if (ms > 0) focusMin += ms / 60000;
+        }
+
+        // Total points = real ledger balance from the rewards engine.
+        const bal = await getBalance(db);
+
+        // Daily reward strip state.
+        const rs = await getDailyRewardState(db, today);
+
+        if (!cancelled) {
+          setHeader({
+            streak,
+            focusMin: Math.round(focusMin),
+            points: bal,
+            dayCounts: Object.fromEntries(countRows.map((r) => [r.date, r.c])),
+          });
+          setRewardState(rs);
+        }
+      } catch (e) {
+        console.error('[today] header stats failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [db, date, instances, weekDays]);
+
+  const handleClaimReward = useCallback(async () => {
+    try {
+      await claimDailyReward(db, localDateString());
+      try {
+        void haptics.success();
+      } catch {
+        /* ignore */
+      }
+      // Refresh strip state + points after claim.
+      try {
+        const [rs, bal] = await Promise.all([
+          getDailyRewardState(db, localDateString()),
+          getBalance(db),
+        ]);
+        if (!cancelledRef.current) {
+          setRewardState(rs);
+          setHeader((h) => ({ ...h, points: bal }));
+        }
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      // Not earned / already claimed / expired — surface quietly.
+      console.warn('[today] claim failed', e);
+    }
+  }, [db]);
 
   const handleQuickAdd = useCallback(async () => {
     const clean = quickTitle.trim();
@@ -290,7 +423,8 @@ export default function TodayScreen() {
     try {
       void haptics.check();
       const catId = categories[0]?.id ?? null;
-      const prio: Priority = filterPriority ?? 'medium';
+      const prio: Priority =
+        filter === 'high' || filter === 'medium' || filter === 'low' ? filter : 'medium';
       const tpl = await createTemplate(db, {
         title: clean,
         categoryId: catId,
@@ -319,22 +453,15 @@ export default function TodayScreen() {
     } finally {
       setQuickBusy(false);
     }
-  }, [quickTitle, quickBusy, filterPriority, categories, db, date, refresh]);
-
-  const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, k) => addDays(date, k - 3)),
-    [date]
-  );
-
-  const rituals = useMemo(() => instances.filter((i) => i.isRitual), [instances]);
-  const allTasks = useMemo(() => instances.filter((i) => !i.isRitual), [instances]);
+  }, [quickTitle, quickBusy, filter, categories, db, date, refresh]);
 
   const filteredTasks = useMemo(() => {
-    return allTasks.filter((t) => {
-      if (filterPriority && (t.priority ?? 'medium') !== filterPriority) return false;
+    return instances.filter((t) => {
+      if (filter === 'completed') return t.status === 'done';
+      if (filter !== 'all' && (t.priority ?? 'medium') !== filter) return false;
       return true;
     });
-  }, [allTasks, filterPriority]);
+  }, [instances, filter]);
 
   const handleToggle = useCallback(
     async (item: TaskInstance) => {
@@ -343,8 +470,8 @@ export default function TodayScreen() {
         if (!willComplete) {
           await haptics.uncheck();
         } else if (item.isRitual) {
-          const remaining = rituals.filter(
-            (r) => r.id !== item.id && r.status !== 'done'
+          const remaining = instances.filter(
+            (r) => r.isRitual && r.id !== item.id && r.status !== 'done'
           ).length;
           if (remaining === 0) await haptics.finalRitual();
           else await haptics.check();
@@ -356,37 +483,28 @@ export default function TodayScreen() {
       }
       await toggleDone(item.id);
     },
-    [rituals, toggleDone]
-  );
-
-  const handleSkip = useCallback(
-    async (id: string) => {
-      try {
-        await haptics.skip();
-      } catch {
-        /* ignore */
-      }
-      await skipTask(id);
-    },
-    [skipTask]
+    [instances, toggleDone]
   );
 
   const nowHHMM = localTimeString(now);
   const todayStr = localDateString();
 
-  // Upcoming queue: pending tasks, those with alarm times first (sorted), then the rest
+  // Next-up queue: pending non-ritual tasks, timed ones first (future first).
+  const schedulable = useMemo(() => instances.filter((i) => !i.isRitual), [instances]);
   const upcoming = useMemo(() => {
-    const pending = allTasks.filter((t) => t.status === 'pending');
+    const pending = schedulable.filter((t) => t.status === 'pending');
     const timed = pending
       .filter((t) => t.alarmTime)
-      .sort((a, b) => (a.alarmTime! >= nowHHMM ? 0 : 1) - (b.alarmTime! >= nowHHMM ? 0 : 1) || a.alarmTime!.localeCompare(b.alarmTime!));
+      .sort(
+        (a, b) =>
+          (a.alarmTime! >= nowHHMM ? 0 : 1) - (b.alarmTime! >= nowHHMM ? 0 : 1) ||
+          a.alarmTime!.localeCompare(b.alarmTime!)
+      );
     const untimed = pending.filter((t) => !t.alarmTime);
     return [...timed, ...untimed];
-  }, [allTasks, nowHHMM]);
+  }, [schedulable, nowHHMM]);
 
   const nextUp = upcoming[0] ?? null;
-  const nextAfter = upcoming[1] ?? null;
-  const displayedNext = nextTab === 'next' ? nextAfter ?? nextUp : nextUp;
 
   const isOverdue = useCallback(
     (t: TaskInstance) =>
@@ -402,32 +520,38 @@ export default function TodayScreen() {
     setMenuInstance(item);
   }, []);
 
-  const openReschedule = useCallback((item: TaskInstance) => {
-    setMenuInitialView('reschedule');
-    setMenuInstance(item);
-  }, []);
-
   const handleEdit = useCallback((item: TaskInstance) => {
     setMenuInstance(null);
     setEditingInstance({ ...item, skillId: null } as TaskInstanceEx);
     setEditSheetOpen(true);
   }, []);
 
-  const showNextCard = date === todayStr && displayedNext !== null;
-
-  // Day progress
+  // Hero content
+  const hour = now.getHours();
+  const heroSrc = useMemo(() => heroSourceForKey(heroKeyForHour(hour)), [hour]);
+  const greeting = greetingForHour(hour);
+  const heroDateLabel = now
+    .toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+    .toUpperCase();
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
-  const dayFrac = Math.min(1, Math.max(0, (now.getTime() - startOfDay.getTime()) / 86400000));
-  const dayPct = Math.round(dayFrac * 100);
-  const timeStr = now.toLocaleTimeString('en-GB', {
-    hour12: clockFormat === '12h',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  const dateLabel = now.toLocaleDateString('en-GB', DATE_FMT).toUpperCase();
-  const doneLine = `${onTime.done} of ${onTime.planned} done`;
+  const dayPct = Math.round(
+    Math.min(1, Math.max(0, (now.getTime() - startOfDay.getTime()) / 86400000)) * 100
+  );
+
+  // Progress card
+  const doneCount = onTime.done;
+  const plannedCount = onTime.planned;
+  const doneLine = `${doneCount} of ${plannedCount} done`;
+  const focusLabel =
+    header.focusMin >= 60
+      ? `${Math.floor(header.focusMin / 60)}h ${header.focusMin % 60}m`
+      : `${header.focusMin}m`;
 
   // Group tasks for timeline view
   const timelineGroups = useMemo(() => {
@@ -453,23 +577,22 @@ export default function TodayScreen() {
     ].filter((g) => g.items.length > 0);
   }, [filteredTasks]);
 
-  const ritualsDone = rituals.filter((r) => r.status === 'done').length;
-
   const renderTaskCard = (t: TaskInstance, index: number) => (
     <Animated.View
       key={t.id}
       entering={FadeInDown.duration(180).delay(Math.min(index * 30, 180))}
       layout={LinearTransition.duration(180)}
     >
-      <TodayTaskCard
+      <TodayTaskRow
         item={t}
         theme={theme}
         clockFormat={clockFormat}
         overdue={isOverdue(t)}
         onToggle={() => handleToggle(t)}
-        onSkip={() => handleSkip(t.id)}
-        onReschedule={() => openReschedule(t)}
-        onLongPress={() => openMenu(t)}
+        onPlay={() =>
+          router.push({ pathname: '/timer', params: { instanceId: t.id } })
+        }
+        onMenu={() => openMenu(t)}
       />
     </Animated.View>
   );
@@ -481,35 +604,47 @@ export default function TodayScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* 1 — Header row */}
-        <View style={styles.headerRow}>
-          <Text style={[styles.headerCaption, { color: theme.textFaint }]}>{dateLabel}</Text>
-          <Text style={[styles.headerCaption, { color: theme.textFaint }]}>DAY {dayPct}%</Text>
+        {/* 1 — Time-of-day hero */}
+        <View style={[styles.hero, { backgroundColor: '#171310' }]}>
+          {heroSrc != null && (
+            <Image source={heroSrc} style={styles.heroImg} resizeMode="cover" />
+          )}
+          <Svg style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="heroScrim" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#000000" stopOpacity="0.28" />
+                <Stop offset="0.55" stopColor="#000000" stopOpacity="0.12" />
+                <Stop offset="1" stopColor="#000000" stopOpacity="0.74" />
+              </LinearGradient>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#heroScrim)" />
+          </Svg>
+          <View style={styles.heroTop}>
+            <View style={{ flex: 1 }} />
+            <View style={styles.heroDateCol}>
+              <Text style={styles.heroDate} numberOfLines={1}>
+                {heroDateLabel}
+              </Text>
+              <Text style={styles.heroDayPct} numberOfLines={1}>
+                DAY {dayPct}%
+              </Text>
+            </View>
+          </View>
+          <View style={styles.heroBottom}>
+            <Text style={styles.heroGreeting}>{greeting}</Text>
+            <Text style={styles.heroName}>Yuvraj</Text>
+            <Text style={styles.heroQuote}>
+              A focused day today, a better tomorrow.
+            </Text>
+          </View>
         </View>
 
-        {/* 2 — Big live clock + thin day-progress bar + done line */}
-        <Text
-          style={[styles.bigClock, { color: theme.text }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        >
-          {timeStr}
-        </Text>
-        <View style={[styles.dayBarTrack, { backgroundColor: theme.surface3 }]}>
-          <View
-            style={[
-              styles.dayBarFill,
-              { width: `${Math.max(2, dayPct)}%`, backgroundColor: theme.text },
-            ]}
-          />
-        </View>
-        <Text style={[styles.doneLine, { color: theme.textDim }]}>{doneLine}</Text>
-
-        {/* 3 — Week strip */}
+        {/* 2 — Week strip */}
         <View style={styles.weekRow}>
           {weekDays.map((d) => {
             const selected = d === date;
             const isToday = d === todayStr;
+            const hasTasks = (header.dayCounts[d] ?? 0) > 0;
             return (
               <PressableScale
                 key={d}
@@ -518,16 +653,16 @@ export default function TodayScreen() {
                 style={styles.dayCellWrap}
                 innerStyle={[
                   styles.dayCell,
-                  {
-                    backgroundColor: selected ? theme.accent : 'transparent',
-                    borderLeftColor: theme.border,
-                  },
+                  { backgroundColor: selected ? ORANGE : 'transparent' },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`${weekdayShort(d)} ${dayNum(d)}`}
+                accessibilityState={{ selected }}
               >
                 <Text
                   style={[
                     styles.dayDow,
-                    { color: selected ? theme.onAccent : theme.textFaint },
+                    { color: selected ? '#FFFFFF' : theme.textFaint },
                   ]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
@@ -539,7 +674,7 @@ export default function TodayScreen() {
                     styles.dayNum,
                     {
                       color: selected
-                        ? theme.onAccent
+                        ? '#FFFFFF'
                         : isToday
                         ? theme.text
                         : theme.textDim,
@@ -549,183 +684,110 @@ export default function TodayScreen() {
                 >
                   {dayNum(d)}
                 </Text>
+                <View
+                  style={[
+                    styles.dayDot,
+                    {
+                      backgroundColor: hasTasks
+                        ? selected
+                          ? '#FFFFFF'
+                          : ORANGE
+                        : 'transparent',
+                    },
+                  ]}
+                />
               </PressableScale>
             );
           })}
         </View>
 
-        {/* 4 — Today's Progress card */}
+        {/* 3 — Progress card */}
         <View
           style={[
             styles.progressCard,
             { backgroundColor: theme.surface, borderColor: theme.border },
           ]}
         >
-          <View style={styles.progressRow}>
-            <View style={styles.ringWrap}>
-              <ProgressRing theme={theme} done={onTime.done} planned={onTime.planned} />
-              <Text style={[styles.ringPct, { color: theme.textFaint }]}>
-                {onTime.planned > 0 ? Math.round((onTime.done / onTime.planned) * 100) : 0}%
-              </Text>
-            </View>
+          <View style={styles.progressTop}>
+            <ProgressRing done={doneCount} planned={plannedCount} />
             <View style={styles.progressText}>
-              <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
-                TODAY&apos;S PROGRESS
-              </Text>
+              <View style={styles.progressHeadRow}>
+                <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
+                  TODAY&apos;S PROGRESS
+                </Text>
+                <PressableScale
+                  onPress={() => router.push('/stats')}
+                  hitSlop={HIT_SLOP}
+                  innerStyle={[
+                    styles.statsPill,
+                    { borderColor: theme.borderStrong },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="View stats"
+                >
+                  <Text style={[styles.statsPillText, { color: theme.text }]}>
+                    View Stats
+                  </Text>
+                  <ChevronRight color={theme.text} size={13} strokeWidth={2.5} />
+                </PressableScale>
+              </View>
               <Text style={[styles.progressHeading, { color: theme.text }]} numberOfLines={1}>
                 {doneLine}
               </Text>
               <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={2}>
-                {onTime.onTimePct === null
-                  ? 'Complete scheduled tasks to track on time rate'
-                  : `${onTime.onTimePct}% completed within ${graceMin}m grace`}
+                Complete scheduled tasks to build your streak.
               </Text>
             </View>
+          </View>
+          <View style={[styles.statsRow, { borderTopColor: theme.border }]}>
+            <StatCell
+              icon={<Flame color={ORANGE} size={20} strokeWidth={2.2} />}
+              value={`${header.streak}d`}
+              label="Day Streak"
+              theme={theme}
+            />
+            <StatCell
+              icon={<Target color={ORANGE} size={20} strokeWidth={2.2} />}
+              value={`${plannedCount}`}
+              label="Tasks Today"
+              theme={theme}
+            />
+            <StatCell
+              icon={<BarChart3 color={ORANGE} size={20} strokeWidth={2.2} />}
+              value={focusLabel}
+              label="Focus Time"
+              theme={theme}
+            />
+            <StatCell
+              icon={<Star color={ORANGE} size={20} strokeWidth={2.2} />}
+              value={`${header.points}`}
+              label="Total Points"
+              theme={theme}
+            />
           </View>
         </View>
 
-        {/* 5 — Next Up card */}
-        {showNextCard && displayedNext && (
-          <View
-            style={[
-              styles.nextCard,
-              { backgroundColor: theme.surface, borderColor: theme.border },
-            ]}
-          >
-            <View style={styles.nextTopRow}>
-              <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>NEXT UP</Text>
-              <View
-                style={[
-                  styles.upNextToggle,
-                  { backgroundColor: theme.surface2, borderColor: theme.border },
-                ]}
-              >
-                {(['up', 'next'] as const).map((tab) => {
-                  const active = nextTab === tab;
-                  return (
-                    <PressableScale
-                      key={tab}
-                      onPress={() => setNextTab(tab)}
-                      hitSlop={HIT_SLOP}
-                      innerStyle={[
-                        styles.upNextTab,
-                        active && { backgroundColor: theme.accent },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.upNextTabText,
-                          { color: active ? theme.onAccent : theme.textDim },
-                        ]}
-                      >
-                        {tab.toUpperCase()}
-                      </Text>
-                    </PressableScale>
-                  );
-                })}
-              </View>
-            </View>
-            <Text style={[styles.nextTitle, { color: theme.text }]} numberOfLines={2}>
-              {displayedNext.title}
-            </Text>
-            <View style={styles.nextActions}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Start Timer"
-                  variant="primary"
-                  fullWidth
-                  icon={<Play color={theme.onAccent} size={15} strokeWidth={2.4} />}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/timer',
-                      params: { instanceId: displayedNext.id },
-                    })
-                  }
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Mark Done"
-                  variant="secondary"
-                  fullWidth
-                  icon={<Check color={theme.text} size={15} strokeWidth={2.5} />}
-                  onPress={() => handleToggle(displayedNext)}
-                />
-              </View>
-            </View>
-          </View>
-        )}
+        {/* 4 — Next Up card */}
+        <NextUpCard
+          task={nextUp}
+          theme={theme}
+          clockFormat={clockFormat}
+          onStartTimer={() =>
+            nextUp &&
+            router.push({ pathname: '/timer', params: { instanceId: nextUp.id } })
+          }
+          onMarkDone={() => nextUp && handleToggle(nextUp)}
+        />
 
-        {/* Rituals block */}
-        {rituals.length > 0 && (
-          <Card padding={2} elevated>
-            <View style={styles.blockHeader}>
-              <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
-                MORNING RITUALS
-              </Text>
-              <Text style={[styles.monoBadge, { color: theme.textDim }]}>
-                {ritualsDone}/{rituals.length}
-              </Text>
-            </View>
-            <View style={styles.ritualList}>
-              {rituals.map((r, idx) => (
-                <RitualRow
-                  key={r.id}
-                  item={r}
-                  theme={theme}
-                  isLast={idx === rituals.length - 1}
-                  onToggle={() => handleToggle(r)}
-                />
-              ))}
-            </View>
-          </Card>
-        )}
-
-        {/* Skill slot */}
-        {slot && (slot.skill || slot.category) && (
-          <Card padding={2} leftRuleColor={theme.accent}>
-            <View style={styles.slotHeader}>
-              <View style={styles.slotInfo}>
-                <View style={styles.slotTitleRow}>
-                  <Sparkles color={theme.textDim} size={13} strokeWidth={2} />
-                  <Text style={[styles.sectionCaption, { color: theme.textFaint }]}>
-                    CREATIVE SKILL SLOT
-                  </Text>
-                </View>
-                <Text style={[styles.h3, { color: theme.text }]} numberOfLines={1}>
-                  {slot.skill ? slot.skill.name : 'No skill configured'}
-                </Text>
-                <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={1}>
-                  {slot.category ? slot.category.name : 'General'}
-                  {slot.skill ? ` · ${daysAgoLabel(slotLastTs, date)}` : ''}
-                  {slot.overridden ? ' · Overridden' : ''}
-                </Text>
-              </View>
-              <Button
-                label="Change"
-                variant="secondary"
-                size="sm"
-                onPress={openOverridePicker}
-              />
-            </View>
-            {slot.skill && (
-              <View style={{ marginTop: space(1.5) }}>
-                <Button
-                  label="Start Focus Session"
-                  variant="primary"
-                  fullWidth
-                  icon={<Play color={theme.onAccent} size={15} strokeWidth={2.4} />}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/timer',
-                      params: { instanceId: '', skillId: slot.skill!.id },
-                    })
-                  }
-                />
-              </View>
-            )}
-          </Card>
-        )}
+        {/* 5 — Daily Reward strip (wired to rewards engine) */}
+        <DailyRewardStrip
+          theme={theme}
+          currentDay={rewardState?.currentDay ?? 1}
+          claimed={rewardClaimed}
+          claimableIndex={claimableIndex}
+          claimable={rewardClaimable}
+          onClaim={handleClaimReward}
+        />
 
         {/* 6 — Quick-add */}
         <View
@@ -734,6 +796,18 @@ export default function TodayScreen() {
             { backgroundColor: theme.surface, borderColor: theme.border },
           ]}
         >
+          <PressableScale
+            onPress={() => setAddSheetOpen(true)}
+            hitSlop={HIT_SLOP}
+            innerStyle={[
+              styles.quickAddCircle,
+              { backgroundColor: theme.surface2, borderColor: theme.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="New task"
+          >
+            <Plus color={theme.text} size={18} strokeWidth={2.5} />
+          </PressableScale>
           <TextInput
             value={quickTitle}
             onChangeText={setQuickTitle}
@@ -746,28 +820,27 @@ export default function TodayScreen() {
           <PressableScale
             onPress={handleQuickAdd}
             disabled={!quickTitle.trim() || quickBusy}
-            style={styles.quickBtn}
+            hitSlop={HIT_SLOP}
             innerStyle={[
-              styles.quickBtnInner,
+              styles.quickSend,
               {
-                backgroundColor: quickTitle.trim() ? theme.accent : theme.surface2,
-                borderColor: theme.border,
+                backgroundColor: quickTitle.trim() ? ORANGE : theme.surface2,
               },
             ]}
             accessibilityRole="button"
             accessibilityLabel="Quick add task"
           >
-            <Plus
-              color={quickTitle.trim() ? theme.onAccent : theme.textFaint}
-              size={18}
-              strokeWidth={2.5}
+            <Send
+              color={quickTitle.trim() ? '#FFFFFF' : theme.textFaint}
+              size={17}
+              strokeWidth={2.4}
             />
           </PressableScale>
         </View>
 
         {/* 7 — Schedule header + List/Timeline toggle */}
         <View style={styles.tasksHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.textDim }]}>SCHEDULE</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Schedule</Text>
           <View
             style={[
               styles.viewToggle,
@@ -777,23 +850,22 @@ export default function TodayScreen() {
             <PressableScale
               onPress={() => setViewMode('list')}
               hitSlop={HIT_SLOP}
-              style={styles.toggleItem}
               innerStyle={[
                 styles.toggleInner,
-                viewMode === 'list' && { backgroundColor: theme.accent },
+                viewMode === 'list' && { backgroundColor: ORANGE },
               ]}
               accessibilityRole="button"
               accessibilityLabel="List view"
             >
-              <AlignLeft
-                color={viewMode === 'list' ? theme.onAccent : theme.textDim}
+              <List
+                color={viewMode === 'list' ? '#FFFFFF' : theme.textDim}
                 size={14}
                 strokeWidth={2}
               />
               <Text
                 style={[
                   styles.toggleText,
-                  { color: viewMode === 'list' ? theme.onAccent : theme.textDim },
+                  { color: viewMode === 'list' ? '#FFFFFF' : theme.textDim },
                 ]}
               >
                 List
@@ -802,23 +874,22 @@ export default function TodayScreen() {
             <PressableScale
               onPress={() => setViewMode('timeline')}
               hitSlop={HIT_SLOP}
-              style={styles.toggleItem}
               innerStyle={[
                 styles.toggleInner,
-                viewMode === 'timeline' && { backgroundColor: theme.accent },
+                viewMode === 'timeline' && { backgroundColor: ORANGE },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Timeline view"
             >
-              <Clock
-                color={viewMode === 'timeline' ? theme.onAccent : theme.textDim}
+              <Rows3
+                color={viewMode === 'timeline' ? '#FFFFFF' : theme.textDim}
                 size={14}
                 strokeWidth={2}
               />
               <Text
                 style={[
                   styles.toggleText,
-                  { color: viewMode === 'timeline' ? theme.onAccent : theme.textDim },
+                  { color: viewMode === 'timeline' ? '#FFFFFF' : theme.textDim },
                 ]}
               >
                 Timeline
@@ -827,26 +898,38 @@ export default function TodayScreen() {
           </View>
         </View>
 
-        {/* 8 — Priority filter chips */}
-        {allTasks.length > 0 && (
-          <View style={styles.filterRow}>
+        {/* 8 — Filter chips */}
+        <View style={styles.filterRow}>
+          <FilterChip
+            label="All"
+            active={filter === 'all'}
+            theme={theme}
+            onPress={() => setFilter('all')}
+          />
+          {(
+            [
+              { key: 'high', label: 'High Prio', dot: '#EF4444' },
+              { key: 'medium', label: 'Med Prio', dot: ORANGE },
+              { key: 'low', label: 'Low Prio', dot: '#22C55E' },
+            ] as const
+          ).map((f) => (
             <FilterChip
-              label="All"
-              active={filterPriority === null}
+              key={f.key}
+              label={f.label}
+              dot={f.dot}
+              active={filter === f.key}
               theme={theme}
-              onPress={() => setFilterPriority(null)}
+              onPress={() => setFilter(filter === f.key ? 'all' : f.key)}
             />
-            {(['high', 'medium', 'low'] as Priority[]).map((p) => (
-              <FilterChip
-                key={p}
-                label={p === 'high' ? 'High Prio' : p === 'medium' ? 'Med Prio' : 'Low Prio'}
-                active={filterPriority === p}
-                theme={theme}
-                onPress={() => setFilterPriority(filterPriority === p ? null : p)}
-              />
-            ))}
-          </View>
-        )}
+          ))}
+          <FilterChip
+            label="Completed"
+            check
+            active={filter === 'completed'}
+            theme={theme}
+            onPress={() => setFilter(filter === 'completed' ? 'all' : 'completed')}
+          />
+        </View>
 
         {/* 9 — Task list / timeline */}
         {loading ? (
@@ -858,16 +941,16 @@ export default function TodayScreen() {
         ) : filteredTasks.length === 0 ? (
           <EmptyState
             icon={CalendarPlus}
-            title={allTasks.length === 0 ? 'No tasks scheduled' : 'No matching tasks'}
+            title={instances.length === 0 ? 'No tasks scheduled' : 'No matching tasks'}
             subtitle={
-              allTasks.length === 0
+              instances.length === 0
                 ? 'Start building your day with a timed task or morning ritual.'
-                : 'Clear your active priority filter to see all tasks.'
+                : 'Clear your active filter to see all tasks.'
             }
-            actionLabel={allTasks.length === 0 ? 'New Task' : 'Reset Filters'}
+            actionLabel={instances.length === 0 ? 'New Task' : 'Reset Filters'}
             onAction={() => {
-              if (allTasks.length === 0) setAddSheetOpen(true);
-              else setFilterPriority(null);
+              if (instances.length === 0) setAddSheetOpen(true);
+              else setFilter('all');
             }}
           />
         ) : viewMode === 'list' ? (
@@ -879,7 +962,7 @@ export default function TodayScreen() {
             {timelineGroups.map((group) => (
               <View key={group.label} style={styles.timelineBlock}>
                 <View style={styles.timelineHeader}>
-                  <View style={[styles.timelineDot, { backgroundColor: theme.accent }]} />
+                  <View style={[styles.timelineDot, { backgroundColor: ORANGE }]} />
                   <Text style={[styles.sectionCaption, { color: theme.textDim }]}>
                     {group.label}
                   </Text>
@@ -919,47 +1002,23 @@ export default function TodayScreen() {
         onClose={() => setMenuInstance(null)}
         onEdit={handleEdit}
       />
-
-      <Sheet
-        visible={overrideOpen}
-        onClose={() => setOverrideOpen(false)}
-        title="Select Today's Skill"
-      >
-        <View style={{ gap: space(1), paddingTop: space(1) }}>
-          {overrideSkills.map((s) => (
-            <PressableScale
-              key={s.id}
-              onPress={() => applyOverride(s.id)}
-              style={styles.overrideRow}
-              innerStyle={[
-                styles.overrideRowInner,
-                {
-                  backgroundColor:
-                    slot?.skill?.id === s.id ? theme.surface3 : theme.surface2,
-                  borderColor:
-                    slot?.skill?.id === s.id ? theme.borderStrong : theme.border,
-                },
-              ]}
-            >
-              <Text style={[styles.body, { color: theme.text }]}>{s.name}</Text>
-              {slot?.skill?.id === s.id && (
-                <Check color={theme.text} size={18} strokeWidth={2.5} />
-              )}
-            </PressableScale>
-          ))}
-        </View>
-      </Sheet>
     </SafeAreaView>
   );
 }
 
+/* ---------------------------------- pieces ---------------------------------- */
+
 function FilterChip({
   label,
+  dot,
+  check,
   active,
   theme,
   onPress,
 }: {
   label: string;
+  dot?: string;
+  check?: boolean;
   active: boolean;
   theme: ThemePalette;
   onPress: () => void;
@@ -971,15 +1030,32 @@ function FilterChip({
       innerStyle={[
         styles.filterChip,
         {
-          backgroundColor: active ? theme.accent : 'transparent',
-          borderColor: active ? theme.accent : theme.border,
+          backgroundColor: active ? ORANGE : 'transparent',
+          borderColor: active ? ORANGE : theme.border,
         },
       ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
     >
+      {dot != null && (
+        <View
+          style={[
+            styles.filterDot,
+            { backgroundColor: active ? '#FFFFFF' : dot },
+          ]}
+        />
+      )}
+      {check === true && (
+        <Check
+          color={active ? '#FFFFFF' : theme.textDim}
+          size={13}
+          strokeWidth={2.5}
+        />
+      )}
       <Text
         style={[
           styles.filterChipText,
-          { color: active ? theme.onAccent : theme.textDim },
+          { color: active ? '#FFFFFF' : theme.textDim },
         ]}
         numberOfLines={1}
       >
@@ -989,29 +1065,343 @@ function FilterChip({
   );
 }
 
-/** Screenshot-style task card: status bar on top, checkbox row, SKIP/MOVE actions. */
-function TodayTaskCard({
+function StatCell({
+  icon,
+  value,
+  label,
+  theme,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  label: string;
+  theme: ThemePalette;
+}) {
+  return (
+    <View style={styles.statCell}>
+      {icon}
+      <Text style={[styles.statValue, { color: theme.text }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[styles.statLabel, { color: theme.textFaint }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/** Circular progress ring with an orange gradient stroke. */
+function ProgressRing({ done, planned }: { done: number; planned: number }) {
+  const size = 96;
+  const stroke = 10;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const frac = planned > 0 ? done / planned : 0;
+  const pct = planned > 0 ? Math.round(frac * 100) : 0;
+
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(frac, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [frac, progress]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: c * (1 - progress.value),
+  }));
+
+  return (
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <LinearGradient id="todayRingGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#FBBF24" />
+            <Stop offset="1" stopColor={ORANGE_DEEP} />
+          </LinearGradient>
+        </Defs>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="rgba(128, 128, 128, 0.22)"
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <AnimatedCircle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="url(#todayRingGrad)"
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={`${c}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          animatedProps={animatedProps}
+        />
+      </Svg>
+      <View style={styles.ringCenter}>
+        <Text style={styles.ringPct}>{pct}%</Text>
+        <Text style={styles.ringFrac}>
+          {done}/{planned}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** Next-up card with backdrop image (dark gradient fallback) + dark overlay. */
+function NextUpCard({
+  task,
+  theme,
+  clockFormat,
+  onStartTimer,
+  onMarkDone,
+}: {
+  task: TaskInstance | null;
+  theme: ThemePalette;
+  clockFormat: '12h' | '24h';
+  onStartTimer: () => void;
+  onMarkDone: () => void;
+}) {
+  const backdrop = useMemo(() => nextupSource(), []);
+  const prio = (task?.priority ?? 'medium') as Priority;
+
+  return (
+    <View style={[styles.nextCard, { borderColor: theme.border }]}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#171310' }]} />
+      {backdrop != null && (
+        <Image source={backdrop} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      )}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.62)' }]} />
+
+      {task == null ? (
+        <View style={styles.nextEmpty}>
+          <Text style={styles.nextEmptyTitle}>All clear</Text>
+          <Text style={styles.nextEmptySub}>
+            No pending tasks. Rest is part of the discipline too.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.nextContent}>
+          <View style={styles.nextBadge}>
+            <Text style={styles.nextBadgeText}>NEXT UP</Text>
+          </View>
+          <Text style={styles.nextTitle} numberOfLines={2}>
+            {task.title}
+          </Text>
+          <Text style={styles.nextSub} numberOfLines={1}>
+            Start a focused session. You&apos;ve got this.
+          </Text>
+          <View style={styles.nextChips}>
+            <View style={styles.nextChip}>
+              <Clock color="#FFFFFF" size={13} strokeWidth={2.2} />
+              <Text style={styles.nextChipText}>
+                {task.alarmTime
+                  ? formatTimeDisplay(task.alarmTime, clockFormat)
+                  : `${task.durationMin} min`}
+              </Text>
+            </View>
+            <View style={styles.nextChip}>
+              <BarChart3 color="#FFFFFF" size={13} strokeWidth={2.2} />
+              <Text style={styles.nextChipText}>
+                {prio.charAt(0).toUpperCase() + prio.slice(1)}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.nextActions}>
+            <PressableScale
+              onPress={onStartTimer}
+              hitSlop={HIT_SLOP}
+              style={{ flex: 1 }}
+              innerStyle={styles.nextPrimaryBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Start timer"
+            >
+              <Play color="#14100C" size={16} strokeWidth={2.5} fill="#14100C" />
+              <Text style={styles.nextPrimaryText}>Start Timer</Text>
+            </PressableScale>
+            <PressableScale
+              onPress={onMarkDone}
+              hitSlop={HIT_SLOP}
+              style={{ flex: 1 }}
+              innerStyle={styles.nextGhostBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Mark done"
+            >
+              <Check color="#FFFFFF" size={16} strokeWidth={2.5} />
+              <Text style={styles.nextGhostText}>Mark Done</Text>
+            </PressableScale>
+          </View>
+        </View>
+      )}
+
+      <View style={styles.nextVertical} pointerEvents="none">
+        <Text style={styles.nextVerticalText} numberOfLines={1}>
+          Discipline today, freedom tomorrow.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+interface DailyRewardStripProps {
+  theme: ThemePalette;
+  /** 1-based day index into the reward ladder. */
+  currentDay: number;
+  /** Claimed flags parallel to the reward-day ladder. */
+  claimed: boolean[];
+  /** Index of the day currently claimable. */
+  claimableIndex: number;
+  /** Whether the current day can actually be claimed (goal met, not yet claimed). */
+  claimable: boolean;
+  onClaim: () => void;
+}
+
+/**
+ * Daily reward strip, wired to the rewards engine.
+ */
+function DailyRewardStrip({
+  theme,
+  currentDay: _currentDay,
+  claimed,
+  claimableIndex,
+  claimable,
+  onClaim,
+}: DailyRewardStripProps) {
+  return (
+    <View
+      style={[
+        styles.rewardCard,
+        { backgroundColor: theme.surface, borderColor: theme.border },
+      ]}
+    >
+      <View style={styles.rewardTop}>
+        <View style={styles.rewardIconBox}>
+          <Gift color={ORANGE} size={22} strokeWidth={2.2} />
+        </View>
+        <View style={styles.rewardText}>
+          <Text style={[styles.rewardTitle, { color: theme.text }]}>Daily Reward</Text>
+          <Text style={[styles.small, { color: theme.textDim }]} numberOfLines={2}>
+            Complete today&apos;s tasks to claim your reward!
+          </Text>
+        </View>
+      </View>
+      <View style={styles.rewardDays}>
+        {REWARD_DAYS.map((label, i) => {
+          const isClaimed = claimed[i] === true;
+          const isCurrent = i === claimableIndex && !isClaimed && claimable;
+          const isLocked = !isClaimed && !isCurrent;
+          return (
+            <View key={label} style={styles.rewardDay}>
+              <RewardDayIcon
+                theme={theme}
+                claimed={isClaimed}
+                current={isCurrent}
+                locked={isLocked}
+                onClaim={isCurrent ? onClaim : undefined}
+              />
+              <Text
+                style={[
+                  styles.rewardDayLabel,
+                  { color: isClaimed || isCurrent ? theme.text : theme.textFaint },
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function RewardDayIcon({
+  theme,
+  claimed,
+  current,
+  locked,
+  onClaim,
+}: {
+  theme: ThemePalette;
+  claimed: boolean;
+  current: boolean;
+  locked: boolean;
+  onClaim?: () => void;
+}) {
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (current) {
+      pulse.value = withRepeat(withTiming(1.14, { duration: 850 }), -1, true);
+    } else {
+      pulse.value = withTiming(1, { duration: 150 });
+    }
+  }, [current, pulse]);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
+
+  const inner = (
+    <Animated.View
+      style={[
+        styles.rewardDayBox,
+        {
+          backgroundColor: claimed ? ORANGE : current ? ORANGE_PALE : 'transparent',
+          borderColor: current ? ORANGE : theme.border,
+          opacity: locked ? 0.45 : 1,
+        },
+        pulseStyle,
+      ]}
+    >
+      <Gift
+        color={claimed ? '#FFFFFF' : current ? ORANGE : theme.textFaint}
+        size={19}
+        strokeWidth={2.2}
+        fill={claimed ? '#FFFFFF' : 'none'}
+      />
+    </Animated.View>
+  );
+
+  if (onClaim) {
+    return (
+      <PressableScale
+        onPress={onClaim}
+        hitSlop={HIT_SLOP}
+        accessibilityRole="button"
+        accessibilityLabel="Claim daily reward"
+      >
+        {inner}
+      </PressableScale>
+    );
+  }
+  return inner;
+}
+
+/** Task row: orange left accent, checkbox, meta row, play + overflow menu. */
+function TodayTaskRow({
   item,
   theme,
   clockFormat,
   overdue,
   onToggle,
-  onSkip,
-  onReschedule,
-  onLongPress,
+  onPlay,
+  onMenu,
 }: {
   item: TaskInstance;
   theme: ThemePalette;
   clockFormat: '12h' | '24h';
   overdue: boolean;
   onToggle: () => void;
-  onSkip: () => void;
-  onReschedule: () => void;
-  onLongPress: () => void;
+  onPlay: () => void;
+  onMenu: () => void;
 }) {
   const done = item.status === 'done';
-  const prio = item.priority ?? 'medium';
-  const prioLabel = prio === 'high' ? 'HIGH' : prio === 'low' ? 'LOW' : 'MED';
+  const prio = (item.priority ?? 'medium') as Priority;
 
   return (
     <View
@@ -1019,40 +1409,14 @@ function TodayTaskCard({
         styles.taskCard,
         {
           backgroundColor: theme.surface,
-          borderColor: overdue && !done ? theme.borderStrong : theme.border,
+          borderColor: theme.border,
         },
       ]}
     >
-      {/* Status bar */}
-      <View
-        style={[
-          styles.statusBar,
-          {
-            backgroundColor: done ? theme.accent : theme.surface2,
-            borderBottomColor: theme.border,
-          },
-        ]}
-      >
-        <Check
-          color={done ? theme.onAccent : theme.textDim}
-          size={13}
-          strokeWidth={2.5}
-        />
-        <Text
-          style={[
-            styles.statusBarText,
-            { color: done ? theme.onAccent : theme.textDim },
-          ]}
-        >
-          {statusLabel(item.status)}
-        </Text>
-      </View>
-
-      <View style={styles.taskBody}>
-        {/* Checkbox */}
+      <View style={styles.taskRow}>
         <Pressable
           onPress={onToggle}
-          onLongPress={onLongPress}
+          onLongPress={onMenu}
           delayLongPress={400}
           style={styles.taskCheck}
           hitSlop={HIT_SLOP}
@@ -1060,13 +1424,22 @@ function TodayTaskCard({
           accessibilityState={{ checked: done }}
           accessibilityLabel={item.title}
         >
-          <AnimatedCheck checked={done} theme={theme} />
+          <View
+            style={[
+              styles.checkCircle,
+              {
+                borderColor: done ? ORANGE : theme.borderStrong,
+                backgroundColor: done ? ORANGE : 'transparent',
+              },
+            ]}
+          >
+            {done && <Check color="#FFFFFF" size={14} strokeWidth={3} />}
+          </View>
         </Pressable>
 
-        {/* Title + meta */}
         <Pressable
           onPress={onToggle}
-          onLongPress={onLongPress}
+          onLongPress={onMenu}
           delayLongPress={400}
           style={styles.taskMain}
         >
@@ -1092,218 +1465,133 @@ function TodayTaskCard({
               {item.durationMin}m
             </Text>
             <Text style={[styles.taskMetaText, { color: theme.textFaint }]}>·</Text>
-            <View style={[styles.prioBadge, { borderColor: theme.border }]}>
-              <Text style={[styles.prioBadgeText, { color: theme.textDim }]}>
-                {prioLabel}
-              </Text>
-            </View>
+            <View
+              style={[styles.prioDot, { backgroundColor: priorityDotColor(prio) }]}
+            />
+            <Text style={[styles.taskMetaText, { color: theme.textDim }]}>
+              {priorityLabel(prio)}
+            </Text>
             {overdue && !done && (
-              <View style={[styles.lateBadge, { backgroundColor: theme.accent }]}>
-                <Text style={[styles.lateBadgeText, { color: theme.onAccent }]}>LATE</Text>
+              <View style={styles.lateBadge}>
+                <Text style={styles.lateBadgeText}>LATE</Text>
               </View>
             )}
           </View>
         </Pressable>
 
-        {/* SKIP / MOVE actions */}
-        <View style={styles.taskActions}>
-          <PressableScale
-            onPress={onSkip}
-            hitSlop={HIT_SLOP}
-            innerStyle={styles.taskActionBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Skip task"
-          >
-            <SkipForward color={theme.textDim} size={16} strokeWidth={2} />
-            <Text style={[styles.taskActionLabel, { color: theme.textDim }]}>SKIP</Text>
-          </PressableScale>
-          <PressableScale
-            onPress={onReschedule}
-            hitSlop={HIT_SLOP}
-            innerStyle={styles.taskActionBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Move task"
-          >
-            <CalendarDays color={theme.textDim} size={16} strokeWidth={2} />
-            <Text style={[styles.taskActionLabel, { color: theme.textDim }]}>MOVE</Text>
-          </PressableScale>
-        </View>
+        <PressableScale
+          onPress={onPlay}
+          hitSlop={HIT_SLOP}
+          innerStyle={styles.playBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Start timer"
+        >
+          <Play color={ORANGE} size={17} strokeWidth={2.4} />
+        </PressableScale>
+        <PressableScale
+          onPress={onMenu}
+          hitSlop={HIT_SLOP}
+          innerStyle={styles.menuBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Task options"
+        >
+          <MoreVertical color={theme.textDim} size={18} strokeWidth={2.2} />
+        </PressableScale>
       </View>
     </View>
   );
 }
 
-function ProgressRing({
-  theme,
-  done,
-  planned,
-}: {
-  theme: ThemePalette;
-  done: number;
-  planned: number;
-}) {
-  const size = 84;
-  const stroke = 8;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const frac = planned > 0 ? done / planned : 0;
-
-  const progress = useSharedValue(0);
-  const [displayDone, setDisplayDone] = useState(0);
-
-  useEffect(() => {
-    progress.value = withTiming(frac, {
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [frac, progress]);
-
-  useAnimatedReaction(
-    () => Math.round(progress.value * planned),
-    (v, prev) => {
-      if (v !== prev) runOnJS(setDisplayDone)(v);
-    },
-    [planned]
-  );
-
-  const animatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: c * (1 - progress.value),
-  }));
-
-  return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={theme.surface3}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={theme.text}
-          strokeWidth={stroke}
-          fill="none"
-          strokeDasharray={`${c}`}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          animatedProps={animatedProps}
-        />
-      </Svg>
-      <View style={styles.ringCenter}>
-        <Text style={[styles.ringNumber, { color: theme.text }]}>{`${displayDone}`}</Text>
-        <Text style={[styles.ringSub, { color: theme.textFaint }]}>/{planned}</Text>
-      </View>
-    </View>
-  );
-}
-
-function RitualRow({
-  item,
-  theme,
-  isLast,
-  onToggle,
-}: {
-  item: TaskInstance;
-  theme: ThemePalette;
-  isLast: boolean;
-  onToggle: () => void;
-}) {
-  const done = item.status === 'done';
-  return (
-    <PressableScale
-      onPress={onToggle}
-      hitSlop={HIT_SLOP}
-      innerStyle={[
-        styles.ritualRow,
-        !isLast && { borderBottomWidth: 1, borderBottomColor: theme.border },
-      ]}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: done }}
-    >
-      <AnimatedCheck checked={done} theme={theme} />
-      <Text
-        style={[
-          styles.body,
-          {
-            flex: 1,
-            color: done ? theme.textFaint : theme.text,
-            textDecorationLine: done ? 'line-through' : 'none',
-          },
-        ]}
-        numberOfLines={1}
-      >
-        {item.title}
-      </Text>
-      <Text style={[styles.monoSmall, { color: theme.textFaint }]}>
-        {item.durationMin}m
-      </Text>
-    </PressableScale>
-  );
-}
+/* ---------------------------------- styles ---------------------------------- */
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
     paddingHorizontal: space(2),
-    paddingTop: space(1),
+    paddingTop: space(1.5),
     gap: space(2),
   },
-  // 1 — Header row
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: space(0.5),
+  sectionCaption: { ...type.caption },
+  small: { ...type.small },
+
+  /* 1 — Hero */
+  hero: {
+    height: 212,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
-  headerCaption: {
+  heroImg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: undefined,
+    height: undefined,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    paddingHorizontal: space(2),
+    paddingTop: space(1.75),
+  },
+  heroDateCol: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  heroDate: {
     ...type.caption,
     fontSize: 11,
     letterSpacing: 1.2,
+    color: 'rgba(255, 255, 255, 0.92)',
   },
-  // 2 — Big clock
-  bigClock: {
-    ...type.clock,
-    fontSize: 64,
-    lineHeight: 72,
+  heroDayPct: {
+    ...type.mono,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: ORANGE_SOFT,
     fontWeight: '700',
-    marginTop: space(1),
-    fontVariant: ['tabular-nums'],
   },
-  dayBarTrack: {
-    height: 3,
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginTop: space(1.5),
+  heroBottom: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: space(2),
+    paddingBottom: space(2),
+    gap: 1,
   },
-  dayBarFill: {
-    height: '100%',
-    borderRadius: 2,
+  heroGreeting: {
+    ...type.body,
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.72)',
   },
-  doneLine: {
+  heroName: {
+    ...type.h1,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    color: '#FFFFFF',
+  },
+  heroQuote: {
     ...type.small,
-    marginTop: space(1),
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: 'rgba(255, 255, 255, 0.62)',
+    marginTop: 3,
   },
-  // 3 — Week strip
+
+  /* 2 — Week strip */
   weekRow: {
     flexDirection: 'row',
-    marginTop: space(0.5),
+    gap: 2,
   },
-  dayCellWrap: {
-    flex: 1,
-  },
+  dayCellWrap: { flex: 1 },
   dayCell: {
-    minHeight: TAP + 4,
+    minHeight: 68,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: space(1),
     borderRadius: radius.md,
-    borderLeftWidth: 1,
-    gap: 2,
+    gap: 1,
   },
   dayDow: {
     ...type.caption,
@@ -1312,159 +1600,318 @@ const styles = StyleSheet.create({
   },
   dayNum: {
     ...type.mono,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
   },
-  // 4 — Progress card
+  dayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 3,
+  },
+
+  /* 3 — Progress card */
   progressCard: {
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: space(2),
+    ...{
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+    },
   },
-  progressRow: {
+  progressTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space(2.5),
+    gap: space(2),
   },
-  ringWrap: {
+  ringCenter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
   },
   ringPct: {
     ...type.mono,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 19,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  ringFrac: {
+    ...type.mono,
+    fontSize: 10,
+    lineHeight: 13,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   progressText: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
-  progressHeading: {
-    ...type.h2,
-    fontSize: 20,
-    lineHeight: 26,
-  },
-  ringCenter: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  ringNumber: {
-    ...type.mono,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '700',
-  },
-  ringSub: {
-    ...type.mono,
-    fontSize: 10,
-    lineHeight: 12,
-  },
-  // 5 — Next Up card
-  nextCard: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: space(2),
-    gap: space(1.5),
-  },
-  nextTopRow: {
+  progressHeadRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space(1),
   },
-  upNextToggle: {
+  statsPill: {
     flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: 2,
-    gap: 2,
-  },
-  upNextTab: {
-    paddingHorizontal: space(1.5),
-    minHeight: 30,
-    borderRadius: radius.sm - 2,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 2,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingLeft: space(1.5),
+    paddingRight: space(1),
+    paddingVertical: 7,
   },
-  upNextTabText: {
+  statsPillText: {
     ...type.caption,
     fontSize: 10,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
+  },
+  progressHeading: {
+    ...type.h2,
+    fontSize: 21,
+    lineHeight: 26,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    marginTop: space(2),
+    paddingTop: space(1.75),
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    ...type.mono,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  statLabel: {
+    ...type.caption,
+    fontSize: 9,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+
+  /* 4 — Next Up card */
+  nextCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    minHeight: 208,
+  },
+  nextEmpty: {
+    padding: space(2.5),
+    paddingRight: space(5),
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 208,
+  },
+  nextEmptyTitle: {
+    ...type.h2,
+    fontSize: 19,
+    color: '#FFFFFF',
+  },
+  nextEmptySub: {
+    ...type.small,
+    color: 'rgba(255, 255, 255, 0.62)',
+  },
+  nextContent: {
+    padding: space(2),
+    paddingRight: space(4.5),
+    gap: space(1.25),
+  },
+  nextBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(249, 115, 22, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(249, 115, 22, 0.45)',
+    borderRadius: radius.pill,
+    paddingHorizontal: space(1.5),
+    paddingVertical: 5,
+  },
+  nextBadgeText: {
+    ...type.caption,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    color: ORANGE_SOFT,
   },
   nextTitle: {
     ...type.h2,
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 21,
+    lineHeight: 27,
+    color: '#FFFFFF',
+  },
+  nextSub: {
+    ...type.small,
+    color: 'rgba(255, 255, 255, 0.66)',
+  },
+  nextChips: {
+    flexDirection: 'row',
+    gap: space(1),
+  },
+  nextChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.13)',
+    borderRadius: radius.pill,
+    paddingHorizontal: space(1.5),
+    paddingVertical: 7,
+  },
+  nextChipText: {
+    ...type.caption,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    color: '#FFFFFF',
   },
   nextActions: {
     flexDirection: 'row',
     gap: space(1.25),
     marginTop: space(0.5),
   },
-  // Rituals + skill slot
-  blockHeader: {
+  nextPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: space(1),
-  },
-  ritualList: {
-    gap: 2,
-  },
-  ritualRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space(1.5),
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.md,
     minHeight: TAP,
-    paddingVertical: space(1),
   },
-  slotHeader: {
+  nextPrimaryText: {
+    ...type.label,
+    fontSize: 14,
+    color: '#14100C',
+  },
+  nextGhostBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: radius.md,
+    minHeight: TAP,
+  },
+  nextGhostText: {
+    ...type.label,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  nextVertical: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextVerticalText: {
+    width: 210,
+    textAlign: 'center',
+    fontSize: 11,
+    letterSpacing: 1.6,
+    color: 'rgba(249, 115, 22, 0.72)',
+    transform: [{ rotate: '90deg' }],
+  },
+
+  /* 5 — Daily Reward strip */
+  rewardCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space(2),
+    gap: space(1.75),
+  },
+  rewardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: space(1.5),
   },
-  slotInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  slotTitleRow: {
-    flexDirection: 'row',
+  rewardIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: ORANGE_PALE,
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
   },
-  // 6 — Quick-add
+  rewardText: {
+    flex: 1,
+    gap: 3,
+  },
+  rewardTitle: {
+    ...type.bodyStrong,
+    fontSize: 16,
+  },
+  rewardDays: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: space(0.5),
+  },
+  rewardDay: {
+    alignItems: 'center',
+    gap: 5,
+  },
+  rewardDayBox: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rewardDayLabel: {
+    ...type.caption,
+    fontSize: 9,
+    letterSpacing: 0.4,
+  },
+
+  /* 6 — Quick-add */
   quickAddWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: radius.lg,
-    paddingLeft: space(2),
-    paddingRight: space(0.75),
-    minHeight: TAP + 4,
+    paddingLeft: space(1),
+    paddingRight: space(1),
+    paddingVertical: space(0.75),
+    minHeight: TAP + 6,
     gap: space(1),
+  },
+  quickAddCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickInput: {
     flex: 1,
     ...type.body,
     paddingVertical: space(1),
   },
-  quickBtn: {
-    width: TAP,
-    height: TAP,
+  quickSend: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quickBtnInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // 7 — Schedule header
+
+  /* 7 — Schedule header */
   tasksHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1472,12 +1919,8 @@ const styles = StyleSheet.create({
     marginTop: space(0.5),
   },
   sectionTitle: {
-    ...type.caption,
-    fontSize: 12,
-    letterSpacing: 1.4,
-  },
-  sectionCaption: {
-    ...type.caption,
+    ...type.h2,
+    fontSize: 19,
   },
   viewToggle: {
     flexDirection: 'row',
@@ -1486,7 +1929,6 @@ const styles = StyleSheet.create({
     padding: 2,
     gap: 2,
   },
-  toggleItem: {},
   toggleInner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1500,58 +1942,64 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.4,
   },
-  // 8 — Filter chips
+
+  /* 8 — Filter chips */
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: space(1),
     paddingVertical: 2,
   },
   filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
     borderRadius: radius.pill,
-    paddingHorizontal: space(2),
+    paddingHorizontal: space(1.75),
     minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  filterDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   filterChipText: {
     ...type.caption,
     fontSize: 11,
     letterSpacing: 0.5,
   },
-  // 9 — Task cards
+
+  /* 9 — Task rows */
   taskList: {
     gap: space(1.5),
   },
   taskCard: {
     borderWidth: 1,
+    borderLeftWidth: 3,
+    borderLeftColor: ORANGE,
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
-  statusBar: {
+  taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: space(2),
-    paddingVertical: space(1),
-    borderBottomWidth: 1,
-  },
-  statusBarText: {
-    ...type.caption,
-    fontSize: 10,
-    letterSpacing: 1.2,
-  },
-  taskBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: space(1.5),
-    paddingLeft: space(1),
-    paddingRight: space(1.5),
+    paddingVertical: space(1.25),
+    paddingLeft: space(0.75),
+    paddingRight: space(1),
     gap: space(0.5),
   },
   taskCheck: {
     width: TAP,
     minHeight: TAP,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1577,20 +2025,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  prioBadge: {
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  prioBadgeText: {
-    ...type.mono,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '700',
-    letterSpacing: 0.6,
+  prioDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   lateBadge: {
+    backgroundColor: ORANGE,
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1600,29 +2041,24 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.8,
+    color: '#FFFFFF',
   },
-  taskActions: {
+  playBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    paddingLeft: space(1),
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(128,128,128,0.15)',
   },
-  taskActionBtn: {
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    paddingHorizontal: space(1),
-    paddingVertical: 6,
-    minWidth: 52,
   },
-  taskActionLabel: {
-    ...type.caption,
-    fontSize: 9,
-    letterSpacing: 0.8,
-  },
-  // Timeline
+
+  /* Timeline */
   timelineWrap: {
     gap: space(2),
   },
@@ -1644,30 +2080,5 @@ const styles = StyleSheet.create({
     marginLeft: 3.5,
     paddingLeft: space(1.75),
     gap: space(1.5),
-  },
-  overrideRow: {},
-  overrideRowInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: TAP,
-    paddingHorizontal: space(2),
-    borderRadius: radius.md,
-    borderWidth: 1,
-  },
-  h3: { ...type.h3 },
-  body: { ...type.body },
-  small: { ...type.small },
-  monoSmall: {
-    ...type.mono,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
-  monoBadge: {
-    ...type.mono,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
   },
 });

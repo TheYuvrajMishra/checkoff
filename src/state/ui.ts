@@ -31,6 +31,18 @@ interface UiState {
   clockFormat: ClockFormat;
   weekStart: WeekStart;
   alarmSound: AlarmSoundId;
+  // Reward notification prefs (mirrored from meta table for fast UI reads).
+  rewardStreakAlerts: boolean;
+  rewardDailyNudge: boolean;
+  /** 'HH:MM' local time */
+  rewardNudgeTime: string;
+  rewardAffordableAlerts: boolean;
+  rewardLevelUp: boolean;
+  rewardWeeklyReview: boolean;
+  /** 'HH:MM' local time */
+  rewardQuietStart: string;
+  /** 'HH:MM' local time */
+  rewardQuietEnd: string;
   hydrated: boolean;
   set: (p: Partial<UiState>) => void;
   setThemeMode: (mode: ThemeMode) => void;
@@ -41,6 +53,18 @@ interface UiState {
   setGraceMin: (min: number) => void;
   setSnoozeMin: (min: number) => void;
   setAlarmSound: (sound: AlarmSoundId) => void;
+  setRewardNotif: (p: Partial<RewardNotifPrefs>) => void;
+}
+
+export interface RewardNotifPrefs {
+  streakAlerts: boolean;
+  dailyNudge: boolean;
+  nudgeTime: string;
+  affordableAlerts: boolean;
+  levelUp: boolean;
+  weeklyReview: boolean;
+  quietStart: string;
+  quietEnd: string;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -53,6 +77,14 @@ export const useUiStore = create<UiState>()((set) => ({
   clockFormat: '24h',
   weekStart: 'mon',
   alarmSound: 'pulse',
+  rewardStreakAlerts: true,
+  rewardDailyNudge: true,
+  rewardNudgeTime: '20:00',
+  rewardAffordableAlerts: true,
+  rewardLevelUp: true,
+  rewardWeeklyReview: true,
+  rewardQuietStart: '22:00',
+  rewardQuietEnd: '07:00',
   hydrated: false,
   set: (p) =>
     set((prev) => {
@@ -85,5 +117,17 @@ export const useUiStore = create<UiState>()((set) => ({
     set((prev) => ({ ...prev, snoozeMin })),
   setAlarmSound: (alarmSound) =>
     set((prev) => ({ ...prev, alarmSound })),
+  setRewardNotif: (p) =>
+    set((prev) => ({
+      ...prev,
+      ...(p.streakAlerts !== undefined && { rewardStreakAlerts: p.streakAlerts }),
+      ...(p.dailyNudge !== undefined && { rewardDailyNudge: p.dailyNudge }),
+      ...(p.nudgeTime !== undefined && { rewardNudgeTime: p.nudgeTime }),
+      ...(p.affordableAlerts !== undefined && { rewardAffordableAlerts: p.affordableAlerts }),
+      ...(p.levelUp !== undefined && { rewardLevelUp: p.levelUp }),
+      ...(p.weeklyReview !== undefined && { rewardWeeklyReview: p.weeklyReview }),
+      ...(p.quietStart !== undefined && { rewardQuietStart: p.quietStart }),
+      ...(p.quietEnd !== undefined && { rewardQuietEnd: p.quietEnd }),
+    })),
 }));
 

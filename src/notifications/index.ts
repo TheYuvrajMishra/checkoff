@@ -28,6 +28,7 @@ import { addDays, localDateString, nowUtcIso } from '../db/time';
 import { getMeta, META_KEYS } from '../db/repos/meta';
 import { useUiStore, type AlarmSoundId } from '../state/ui';
 import { haptics } from '../haptics';
+import { ensureRewardChannel } from './rewards';
 
 export const ALARM_CHANNEL_ID = 'checkoff-alarms';
 export const TIMER_CHANNEL_ID = 'checkoff-timer';
@@ -326,6 +327,8 @@ export async function setupNotifications(): Promise<void> {
     } catch (e) {
       console.warn('[checkoff] could not create timer channel', e);
     }
+    // Separate, lower-priority channel for informational reward updates.
+    await ensureRewardChannel();
   }
 
   try {

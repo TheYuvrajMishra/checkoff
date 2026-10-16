@@ -1,6 +1,7 @@
 import type { SQLiteBindValue, SQLiteDatabase } from 'expo-sqlite';
 import type { EventActor, LogEvent, LogEventType } from './types';
 import { deviceOffsetMinutes, nowUtcIso } from './time';
+import { evaluateRewards } from '../rewards/engine';
 
 export interface LogInput {
   eventType: LogEventType;
@@ -22,13 +23,15 @@ export interface LogInput {
  */
 export async function logEvent(db: SQLiteDatabase, input: LogInput): Promise<number> {
   const now = new Date();
+  const tsUtc = nowUtcIso(now);
+  const tsOffsetMin = deviceOffsetMinutes(now);
   const result = await db.runAsync(
     `INSERT INTO log_events
        (ts_utc, ts_offset_min, event_type, task_instance_id, template_id,
         timer_session_id, actor, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    nowUtcIso(now),
-    deviceOffsetMinutes(now),
+    tsUtc,
+    tsOffsetMin,
     input.eventType,
     input.taskInstanceId ?? null,
     input.templateId ?? null,
@@ -36,7 +39,25 @@ export async function logEvent(db: SQLiteDatabase, input: LogInput): Promise<num
     input.actor ?? 'user',
     input.payload ? JSON.stringify(input.payload) : null
   );
-  return Number(result.lastInsertRowId);
+  const id = Number(result.lastInsertRowId);
+  // Fire-and-forget: reward evaluation must never break the log insert.
+  try {
+    await evaluateRewards(db, {
+      id,
+      tsUtc,
+      tsOffsetMin,
+      eventType: input.eventType,
+      taskInstanceId: input.taskInstanceId ?? null,
+      templateId: input.templateId ?? null,
+      timerSessionId: input.timerSessionId ?? null,
+      actor: input.actor ?? 'user',
+      payload: input.payload ?? null,
+      createdAt: tsUtc,
+    });
+  } catch (e) {
+    console.warn('[checkoff] reward evaluation failed', e);
+  }
+  return id;
 }
 
 export interface LogFilters {
