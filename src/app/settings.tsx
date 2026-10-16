@@ -67,10 +67,6 @@ import {
 } from '../notifications/rewards';
 import pkg from '../../package.json';
 
-/** Primary accent — matches the Today page (migration from amber to purple). */
-const PURPLE = '#8B5CF6';
-const PURPLE_PALE = 'rgba(139, 92, 246, 0.14)';
-
 const GRACE_DETENTS = [5, 10, 15, 20, 30, 45, 60];
 const SNOOZE_DETENTS = [3, 5, 9, 10, 15, 20, 30];
 const INTENSITY_OPTIONS: HapticIntensity[] = ['light', 'medium', 'strong'];
@@ -87,7 +83,7 @@ const ALARM_SOUNDS: {
   { id: 'industrial', label: 'Industrial', desc: 'Rapid high-urgency mechanical cadence', rate: 1.5 },
 ];
 
-/** Card section header: purple icon box + caption label, Today-page style. */
+/** Card section header: accent icon box + caption label, Today-page style. */
 function SectionHeader({
   palette,
   icon,
@@ -102,7 +98,7 @@ function SectionHeader({
       <View
         style={[
           styles.sectionIconBox,
-          { backgroundColor: PURPLE_PALE, borderColor: 'rgba(139, 92, 246, 0.35)' },
+          { backgroundColor: palette.accentDim, borderColor: palette.borderStrong },
         ]}
       >
         {icon}
@@ -410,7 +406,7 @@ export default function SettingsScreen() {
                 },
               ]}
             >
-              <FileText size={20} color={PURPLE} />
+              <FileText size={20} color={palette.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.portalTitle, { color: palette.textPrimary }]}>
@@ -428,7 +424,7 @@ export default function SettingsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Palette size={16} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Palette size={16} color={palette.accent} strokeWidth={2.2} />}
             label="APPEARANCE & TIME"
           />
 
@@ -458,7 +454,7 @@ export default function SettingsScreen() {
                     style={[
                       styles.segmentBtn,
                       active && {
-                        backgroundColor: PURPLE,
+                        backgroundColor: palette.accent,
                       },
                     ]}
                   >
@@ -467,7 +463,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? '#FFFFFF'
+                            ? palette.onAccent
                             : palette.textSecondary,
                         },
                       ]}
@@ -506,7 +502,7 @@ export default function SettingsScreen() {
                     onPress={() => setClockFormat(fmt)}
                     style={[
                       styles.segmentCompactBtn,
-                      active && { backgroundColor: PURPLE },
+                      active && { backgroundColor: palette.accent },
                     ]}
                   >
                     <Text
@@ -514,7 +510,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? '#FFFFFF'
+                            ? palette.onAccent
                             : palette.textSecondary,
                         },
                       ]}
@@ -558,7 +554,7 @@ export default function SettingsScreen() {
                     onPress={() => setWeekStart(w.id)}
                     style={[
                       styles.segmentCompactBtn,
-                      active && { backgroundColor: PURPLE },
+                      active && { backgroundColor: palette.accent },
                     ]}
                   >
                     <Text
@@ -566,7 +562,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? '#FFFFFF'
+                            ? palette.onAccent
                             : palette.textSecondary,
                         },
                       ]}
@@ -584,7 +580,7 @@ export default function SettingsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Volume2 size={16} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Volume2 size={16} color={palette.accent} strokeWidth={2.2} />}
             label="ALARMS & WINDOWS"
           />
 
@@ -618,7 +614,7 @@ export default function SettingsScreen() {
                         ? palette.bgElevated
                         : palette.bg,
                       borderColor: selected
-                        ? PURPLE
+                        ? palette.accent
                         : palette.border,
                       borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                     },
@@ -639,7 +635,7 @@ export default function SettingsScreen() {
                         <Text
                           style={[
                             styles.activeTag,
-                            { color: PURPLE },
+                            { color: palette.accent },
                           ]}
                         >
                           ACTIVE
@@ -659,14 +655,14 @@ export default function SettingsScreen() {
                       styles.previewCircle,
                       {
                         backgroundColor: playing
-                          ? PURPLE
+                          ? palette.accent
                           : palette.bgSurface,
-                        borderColor: playing ? PURPLE : palette.borderStrong,
+                        borderColor: playing ? palette.accent : palette.borderStrong,
                       },
                     ]}
                   >
                     {playing ? (
-                      <VolumeX size={15} color="#FFFFFF" />
+                      <VolumeX size={15} color={palette.onAccent} />
                     ) : (
                       <Volume2 size={15} color={palette.textPrimary} />
                     )}
@@ -705,7 +701,7 @@ export default function SettingsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Bell size={16} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Bell size={16} color={palette.accent} strokeWidth={2.2} />}
             label="REWARD NOTIFICATIONS"
           />
 
@@ -863,7 +859,7 @@ export default function SettingsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Vibrate size={16} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Vibrate size={16} color={palette.accent} strokeWidth={2.2} />}
             label="TACTILE ENGINE"
           />
 
@@ -905,7 +901,7 @@ export default function SettingsScreen() {
                     disabled={!ui.hapticsEnabled}
                     style={[
                       styles.segmentBtn,
-                      active && { backgroundColor: PURPLE },
+                      active && { backgroundColor: palette.accent },
                       !ui.hapticsEnabled && { opacity: 0.4 },
                     ]}
                   >
@@ -914,7 +910,7 @@ export default function SettingsScreen() {
                         styles.segmentText,
                         {
                           color: active
-                            ? '#FFFFFF'
+                            ? palette.onAccent
                             : palette.textSecondary,
                         },
                       ]}
@@ -932,7 +928,7 @@ export default function SettingsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Database size={16} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Database size={16} color={palette.accent} strokeWidth={2.2} />}
             label="DATA SOVEREIGNTY & BACKUP"
           />
 
@@ -959,7 +955,7 @@ export default function SettingsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Info size={16} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Info size={16} color={palette.accent} strokeWidth={2.2} />}
             label="ABOUT CHECKOFF"
           />
 

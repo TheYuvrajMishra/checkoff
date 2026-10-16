@@ -35,9 +35,6 @@ import { Button } from '../../components/Button';
 import { FAB_CLEARANCE } from '../../components/Fab';
 import { haptics } from '../../haptics';
 
-/** Primary accent — matches the Today page (migration from amber to purple). */
-const PURPLE = '#8B5CF6';
-
 const TYPE_FILTERS: ('all' | LogEventType)[] = [
   'all',
   'created',
@@ -362,15 +359,15 @@ export default function LogScreen() {
                 style={[
                   styles.chip,
                   {
-                    backgroundColor: active ? PURPLE : p.bgSurface,
-                    borderColor: active ? PURPLE : p.border,
+                    backgroundColor: active ? p.accent : p.bgSurface,
+                    borderColor: active ? p.accent : p.border,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.chipText,
-                    { color: active ? '#FFFFFF' : p.textSecondary },
+                    { color: active ? p.onAccent : p.textSecondary },
                   ]}
                   numberOfLines={1}
                 >

@@ -32,7 +32,7 @@ import { dark, hitSlop12, hitSlop8, light, Priority, priorityRuleColor, radius, 
 import { PressableScale } from '../../components/PressableScale';
 import { MetallicText } from '../../components/MetallicText';
 import { Card } from '../../components/Card';
-import { Button } from '../../components/Button';
+import { Button, MetalFill } from '../../components/Button';
 import { Sheet } from '../../components/Sheet';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { FAB_CLEARANCE } from '../../components/Fab';
@@ -48,9 +48,6 @@ import {
 import { addDays, localDateString, nowUtcIso } from '../../db/time';
 import type { LogEvent, TaskInstance, TimerSession } from '../../db/types';
 import { haptics } from '../../haptics';
-
-/** Primary accent — matches the Today page (migration from amber to purple). */
-const PURPLE = '#8B5CF6';
 
 const MONTHS = [
   'January',
@@ -315,7 +312,7 @@ export default function CalendarScreen() {
   const cellSize = Math.max(36, Math.floor((width - gridPadding - gap * 6) / 7));
 
   function getHeatFill(done: number, total: number, isSelected: boolean): string {
-    if (isSelected) return PURPLE;
+    if (isSelected) return palette.accent;
     if (total === 0 || done === 0) return palette.bgElevated;
     const ratio = done / total;
     if (theme === 'dark') {
@@ -481,7 +478,7 @@ export default function CalendarScreen() {
                       width: cellSize,
                       backgroundColor: fill,
                       borderColor: isSelected
-                        ? PURPLE
+                        ? palette.accent
                         : isToday
                           ? palette.borderStrong
                           : palette.border,
@@ -631,7 +628,7 @@ export default function CalendarScreen() {
                               height: cellSize,
                               backgroundColor: fill,
                               borderColor: isSelected
-                                ? PURPLE
+                                ? palette.accent
                                 : isToday
                                   ? palette.borderStrong
                                   : palette.border,
@@ -726,15 +723,27 @@ export default function CalendarScreen() {
                 hitSlop={hitSlop8}
                 accessibilityRole="button"
                 accessibilityLabel={`Add task for ${selectedDate}`}
-                style={[
-                  styles.inlineAddBtn,
-                  {
-                    backgroundColor: PURPLE,
-                  },
+                style={{ backgroundColor: 'transparent' }}
+                innerStyle={[
+                  styles.inlineAddBtnInner,
+                  { borderRadius: radius.pill, overflow: 'hidden' },
                 ]}
               >
-                <Plus size={15} color="#FFFFFF" strokeWidth={2.5} />
-                <Text style={[styles.inlineAddText, { color: '#FFFFFF' }]}>
+                <MetalFill
+                  kind={theme === 'dark' ? 'light' : 'dark'}
+                  borderRadius={radius.pill}
+                />
+                <Plus
+                  size={15}
+                  color={theme === 'dark' ? '#1a1a1a' : '#FFFFFF'}
+                  strokeWidth={2.5}
+                />
+                <Text
+                  style={[
+                    styles.inlineAddText,
+                    { color: theme === 'dark' ? '#1a1a1a' : '#FFFFFF' },
+                  ]}
+                >
                   Add
                 </Text>
               </PressableScale>
@@ -755,7 +764,7 @@ export default function CalendarScreen() {
                   },
                 ]}
               >
-                <ArrowUpRight size={16} color={PURPLE} />
+                <ArrowUpRight size={16} color={palette.accent} />
               </PressableScale>
             </View>
           </View>
@@ -785,8 +794,8 @@ export default function CalendarScreen() {
                   style={[
                     styles.subTabPill,
                     active && {
-                      backgroundColor: PURPLE,
-                      borderColor: PURPLE,
+                      backgroundColor: palette.accent,
+                      borderColor: palette.accent,
                     },
                   ]}
                 >
@@ -794,7 +803,7 @@ export default function CalendarScreen() {
                     style={[
                       styles.subTabText,
                       {
-                        color: active ? '#FFFFFF' : palette.textMuted,
+                        color: active ? palette.onAccent : palette.textMuted,
                       },
                     ]}
                     numberOfLines={1}
@@ -1357,13 +1366,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xs,
   },
-  inlineAddBtn: {
+  inlineAddBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
     paddingHorizontal: space.md,
     minHeight: 40,
-    borderRadius: radius.pill,
   },
   inlineAddText: {
     ...type.bodySm,

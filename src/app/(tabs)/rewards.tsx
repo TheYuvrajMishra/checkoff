@@ -53,10 +53,6 @@ import {
   type UserReward,
 } from '../../rewards/engine';
 
-/** Primary accent — matches the Today page (migration from amber to purple). */
-const PURPLE = '#8B5CF6';
-const PURPLE_PALE = 'rgba(139, 92, 246, 0.14)';
-
 const BADGE_ICONS: Record<BadgeView['icon'], typeof Flame> = {
   streak: Flame,
   completions: CheckCircle2,
@@ -149,7 +145,7 @@ const emptyStyles = StyleSheet.create({
   },
 });
 
-/** Section header: purple icon box + title + hint, Today-page style. */
+/** Section header: accent icon box + title + hint, Today-page style. */
 function SectionHeader({
   palette,
   icon,
@@ -166,7 +162,7 @@ function SectionHeader({
       <View
         style={[
           styles.sectionIconBox,
-          { backgroundColor: PURPLE_PALE, borderColor: 'rgba(139, 92, 246, 0.35)' },
+          { backgroundColor: palette.accentDim, borderColor: palette.borderStrong },
         ]}
       >
         {icon}
@@ -344,7 +340,7 @@ export default function RewardsScreen() {
                 },
               ]}
             >
-              <Star size={22} color={PURPLE} />
+              <Star size={22} color={palette.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.balanceLabel, { color: palette.textMuted }]}>
@@ -397,7 +393,7 @@ export default function RewardsScreen() {
                 styles.progressFill,
                 {
                   width: `${Math.min(100, Math.max(0, state.level.progress * 100))}%`,
-                  backgroundColor: PURPLE,
+                  backgroundColor: palette.accent,
                 },
               ]}
             />
@@ -412,7 +408,7 @@ export default function RewardsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Trophy size={17} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Trophy size={17} color={palette.accent} strokeWidth={2.2} />}
             title="Badges"
             sub={`${earnedCount} / ${state.badges.length} earned`}
           />
@@ -436,7 +432,7 @@ export default function RewardsScreen() {
                       {
                         backgroundColor: earned ? palette.bgElevated : palette.bg,
                         borderColor: earned
-                          ? 'rgba(139, 92, 246, 0.45)'
+                          ? palette.borderStrong
                           : palette.border,
                         opacity: earned ? 1 : 0.55,
                       },
@@ -447,16 +443,16 @@ export default function RewardsScreen() {
                         styles.badgeIconWrap,
                         {
                           backgroundColor: earned
-                            ? PURPLE_PALE
+                            ? palette.accentDim
                             : palette.bgSurface,
                           borderColor: earned
-                            ? 'rgba(139, 92, 246, 0.55)'
+                            ? palette.borderStrong
                             : palette.border,
                         },
                       ]}
                     >
                       {earned ? (
-                        <Icon size={20} color={PURPLE} />
+                        <Icon size={20} color={palette.accent} />
                       ) : (
                         <Lock size={18} color={palette.textFaint} />
                       )}
@@ -484,7 +480,7 @@ export default function RewardsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Gift size={17} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Gift size={17} color={palette.accent} strokeWidth={2.2} />}
             title="My Rewards"
             sub="Define your own rewards and redeem them with points"
           />
@@ -562,7 +558,7 @@ export default function RewardsScreen() {
                     >
                       <Ticket
                         size={16}
-                        color={affordable ? PURPLE : palette.textFaint}
+                        color={affordable ? palette.accent : palette.textFaint}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -599,7 +595,7 @@ export default function RewardsScreen() {
         <Card palette={palette} padding="md">
           <SectionHeader
             palette={palette}
-            icon={<Star size={17} color={PURPLE} strokeWidth={2.2} />}
+            icon={<Star size={17} color={palette.accent} strokeWidth={2.2} />}
             title="History"
             sub="Every point earned and spent"
           />
@@ -643,7 +639,7 @@ export default function RewardsScreen() {
                     <Text
                       style={[
                         styles.ledgerPoints,
-                        { color: positive ? PURPLE : palette.textPrimary },
+                        { color: positive ? palette.accent : palette.textPrimary },
                       ]}
                       numberOfLines={1}
                     >

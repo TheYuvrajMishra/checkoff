@@ -52,16 +52,6 @@ import { addDays, localDateString } from '../../db/time';
 import type { TaskInstance } from '../../db/types';
 import { haptics } from '../../haptics';
 
-/**
- * Purple accent family — the app is migrating from amber #F97316 to purple,
- * so all accents and charts on this screen use purple.
- */
-const PURPLE = '#8B5CF6';
-const PURPLE_DEEP = '#7C3AED';
-const PURPLE_LIGHT = '#A855F7';
-const PURPLE_PALE = 'rgba(139, 92, 246, 0.16)';
-const PURPLE_DARK = '#4C1D95';
-
 const MILESTONES = [7, 30, 100];
 
 function pct(done: number, total: number): number {
@@ -550,7 +540,7 @@ export default function StatsScreen() {
   const maxHour = Math.max(1, ...data.hours);
   const activeDays = data.daily.filter((d) => d.total > 0).length;
 
-  // Weekly bar chart geometry (last 7 days, purple gradient bars).
+  // Weekly bar chart geometry (last 7 days, monochrome gradient bars).
   const barChartH = 148;
   const barTopPad = 22;
   const barBottomPad = 24;
@@ -606,21 +596,21 @@ export default function StatsScreen() {
           </Text>
         </View>
 
-        {/* Streak hero — purple gradient, flame highlight */}
+        {/* Streak hero — monochrome gradient, flame highlight */}
         <Animated.View entering={enter(0)}>
           <View style={[styles.hero, { borderColor: palette.border }]}>
             <Svg style={StyleSheet.absoluteFill}>
               <Defs>
                 <LinearGradient id="statsHeroGrad" x1="0" y1="0" x2="1" y2="1">
-                  <Stop offset="0" stopColor={PURPLE_DEEP} />
-                  <Stop offset="1" stopColor={PURPLE_DARK} />
+                  <Stop offset="0" stopColor={palette.text} stopOpacity={0.32} />
+                  <Stop offset="1" stopColor={palette.text} stopOpacity={0.06} />
                 </LinearGradient>
               </Defs>
               <Rect width="100%" height="100%" fill="url(#statsHeroGrad)" />
             </Svg>
             <View style={styles.heroInner}>
               <View style={styles.heroFlameBox}>
-                <Flame size={28} color={PURPLE_DEEP} fill={PURPLE_DEEP} strokeWidth={2} />
+                <Flame size={28} color={palette.text} fill={palette.text} strokeWidth={2} />
               </View>
               <View style={styles.heroText}>
                 <Text
@@ -656,11 +646,11 @@ export default function StatsScreen() {
           <Animated.View entering={enter(1)}>
             <Card palette={palette} variant="elevated" padding="md">
               <View style={styles.milestoneRow}>
-                <View style={styles.msIconBox}>
-                  <Award size={20} color={PURPLE_LIGHT} />
+                <View style={[styles.msIconBox, { backgroundColor: palette.accentDim }]}>
+                  <Award size={20} color={palette.text} />
                 </View>
                 <Text
-                  style={[styles.milestoneText, { color: palette.textPrimary }]}
+                  style={[styles.milestoneText, { color: palette.textPrimary, backgroundColor: palette.accentDim }]}
                   numberOfLines={2}
                   ellipsizeMode="tail"
                 >
@@ -676,21 +666,21 @@ export default function StatsScreen() {
           <StatCard
             palette={palette}
             index={2}
-            icon={<Flame size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            icon={<Flame size={18} color={palette.text} strokeWidth={2.2} />}
             label="CURRENT STREAK"
             value={`${data.currentStreak}d`}
           />
           <StatCard
             palette={palette}
             index={3}
-            icon={<Trophy size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            icon={<Trophy size={18} color={palette.text} strokeWidth={2.2} />}
             label="BEST STREAK"
             value={`${data.longestStreak}d`}
           />
           <StatCard
             palette={palette}
             index={4}
-            icon={<Target size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            icon={<Target size={18} color={palette.text} strokeWidth={2.2} />}
             label="COMPLETION RATE"
             value={`${data.rate30}%`}
             sub={`${data.rate30Label} in 30d`}
@@ -698,7 +688,7 @@ export default function StatsScreen() {
           <StatCard
             palette={palette}
             index={5}
-            icon={<Timer size={18} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+            icon={<Timer size={18} color={palette.text} strokeWidth={2.2} />}
             label="FOCUS TIME"
             value={fmtMin(data.focusMin)}
             sub="last 30 days"
@@ -710,7 +700,7 @@ export default function StatsScreen() {
           <Card palette={palette} padding="md">
             <SectionHead
               palette={palette}
-              icon={<Medal size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              icon={<Medal size={13} color={palette.text} strokeWidth={2.2} />}
               title="STREAK MILESTONES"
               right={`${MILESTONES.filter((m) => data.currentStreak >= m).length}/${MILESTONES.length} EARNED`}
             />
@@ -723,7 +713,7 @@ export default function StatsScreen() {
                       style={[
                         styles.msCircle,
                         achieved
-                          ? { backgroundColor: PURPLE_PALE, borderColor: PURPLE }
+                          ? { backgroundColor: palette.accentDim, borderColor: palette.accent }
                           : {
                               backgroundColor: 'transparent',
                               borderColor: palette.border,
@@ -732,7 +722,7 @@ export default function StatsScreen() {
                     >
                       <Medal
                         size={20}
-                        color={achieved ? PURPLE_LIGHT : palette.textFaint}
+                        color={achieved ? palette.text : palette.textFaint}
                         strokeWidth={2}
                       />
                     </View>
@@ -766,15 +756,15 @@ export default function StatsScreen() {
           <Card palette={palette} padding="md">
             <SectionHead
               palette={palette}
-              icon={<ChartColumn size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              icon={<ChartColumn size={13} color={palette.text} strokeWidth={2.2} />}
               title="LAST 7 DAYS"
               right={`${activeDays}/7 ACTIVE`}
             />
             <Svg width={chartW} height={barChartH}>
               <Defs>
                 <LinearGradient id="statsBarGrad" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={PURPLE_LIGHT} />
-                  <Stop offset="1" stopColor={PURPLE_DEEP} />
+                  <Stop offset="0" stopColor={palette.text} />
+                  <Stop offset="1" stopColor={palette.textDim} />
                 </LinearGradient>
               </Defs>
               {data.daily.map((d, i) => {
@@ -794,7 +784,7 @@ export default function StatsScreen() {
                         rx={barW / 2}
                         fill="url(#statsBarGrad)"
                         opacity={d.isToday ? 1 : 0.8}
-                        stroke={d.isToday ? '#FFFFFF' : 'none'}
+                        stroke={d.isToday ? palette.bg : 'none'}
                         strokeWidth={1.5}
                       />
                     ) : (
@@ -813,7 +803,7 @@ export default function StatsScreen() {
                         y={y - 6}
                         fontSize={9}
                         fontWeight="700"
-                        fill={d.isToday ? PURPLE_LIGHT : palette.textMuted}
+                        fill={d.isToday ? palette.text : palette.textMuted}
                         textAnchor="middle"
                       >
                         {`${d.rate}%`}
@@ -824,7 +814,7 @@ export default function StatsScreen() {
                       y={barChartH - 8}
                       fontSize={10}
                       fontWeight={d.isToday ? '700' : '600'}
-                      fill={d.isToday ? PURPLE_LIGHT : palette.textMuted}
+                      fill={d.isToday ? palette.text : palette.textMuted}
                       textAnchor="middle"
                     >
                       {d.dow}
@@ -850,7 +840,7 @@ export default function StatsScreen() {
           <Card palette={palette} padding="md">
             <SectionHead
               palette={palette}
-              icon={<TrendingUp size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              icon={<TrendingUp size={13} color={palette.text} strokeWidth={2.2} />}
               title="WEEKLY TREND · 8 WKS"
               right={`${data.weeks[data.weeks.length - 1]?.rate ?? 0}% THIS WK`}
             />
@@ -875,7 +865,7 @@ export default function StatsScreen() {
               <Polyline
                 points={trendPts}
                 fill="none"
-                stroke={PURPLE_LIGHT}
+                stroke={palette.text}
                 strokeWidth={2.5}
               />
               {data.weeks.map((w, idx) => {
@@ -890,7 +880,7 @@ export default function StatsScreen() {
                     cy={y}
                     r={3.5}
                     fill={palette.bg}
-                    stroke={PURPLE_LIGHT}
+                    stroke={palette.text}
                     strokeWidth={2}
                   />
                 );
@@ -922,13 +912,13 @@ export default function StatsScreen() {
           <Card palette={palette} padding="md">
             <SectionHead
               palette={palette}
-              icon={<Zap size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              icon={<Zap size={13} color={palette.text} strokeWidth={2.2} />}
               title="CONSISTENCY"
             />
             <View style={styles.metricList}>
               <MetricRow
                 palette={palette}
-                icon={<CalendarDays size={17} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                icon={<CalendarDays size={17} color={palette.text} strokeWidth={2.2} />}
                 label="7-DAY RATE"
                 sub={`${data.rate7Label} tasks done`}
                 value={`${data.rate7}%`}
@@ -936,7 +926,7 @@ export default function StatsScreen() {
               <View style={[styles.metricDivider, { backgroundColor: palette.border }]} />
               <MetricRow
                 palette={palette}
-                icon={<Clock size={17} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                icon={<Clock size={17} color={palette.text} strokeWidth={2.2} />}
                 label={`ON-TIME (±${graceMin}M)`}
                 sub="30d alarmed tasks"
                 value={data.onTimeRate == null ? '—' : `${data.onTimeRate}%`}
@@ -944,7 +934,7 @@ export default function StatsScreen() {
               <View style={[styles.metricDivider, { backgroundColor: palette.border }]} />
               <MetricRow
                 palette={palette}
-                icon={<Sparkles size={17} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                icon={<Sparkles size={17} color={palette.text} strokeWidth={2.2} />}
                 label="RITUAL ADHERENCE"
                 sub="30d morning rituals"
                 value={data.ritualAdherence == null ? '—' : `${data.ritualAdherence}%`}
@@ -1005,7 +995,7 @@ export default function StatsScreen() {
                             styles.barFill,
                             {
                               width: `${wPct}%`,
-                              backgroundColor: PURPLE,
+                              backgroundColor: palette.accent,
                               opacity,
                             },
                           ]}
@@ -1071,7 +1061,7 @@ export default function StatsScreen() {
                             styles.barFill,
                             {
                               width: `${wPct}%`,
-                              backgroundColor: PURPLE,
+                              backgroundColor: palette.accent,
                               opacity,
                             },
                           ]}
@@ -1090,7 +1080,7 @@ export default function StatsScreen() {
           <Card palette={palette} padding="md">
             <SectionHead
               palette={palette}
-              icon={<Zap size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+              icon={<Zap size={13} color={palette.text} strokeWidth={2.2} />}
               title="PEAK HOURS · 30 DAYS"
               right={
                 data.bestHour == null
@@ -1117,7 +1107,7 @@ export default function StatsScreen() {
                     rx={2}
                     fill={
                       isPeak
-                        ? PURPLE
+                        ? palette.accent
                         : count > 0
                           ? palette.textMuted
                           : palette.border
@@ -1151,7 +1141,7 @@ export default function StatsScreen() {
             <Card palette={palette} variant="elevated" padding="md">
               <SectionHead
                 palette={palette}
-                icon={<CalendarDays size={13} color={PURPLE_LIGHT} strokeWidth={2.2} />}
+                icon={<CalendarDays size={13} color={palette.text} strokeWidth={2.2} />}
                 title={`WEEKLY REVIEW · ${data.lastReview.weekStart} → ${data.lastReview.weekEnd}`}
               />
               <MetallicText variant="h2" palette={palette}>
@@ -1252,16 +1242,15 @@ function StatCard({
     >
       <Card palette={palette} variant="elevated" padding="md" style={styles.statCard}>
         <View style={styles.statIconBox}>{icon}</View>
-        <MetallicText
-          variant="display"
-          palette={palette}
+        <Text
+          style={[type.display, styles.statValue, { color: palette.text }]}
           numberOfLines={1}
+          ellipsizeMode="tail"
           adjustsFontSizeToFit
           minimumFontScale={0.55}
-          style={styles.statValue}
         >
           {value}
-        </MetallicText>
+        </Text>
         <Text
           style={[styles.statLabel, { color: palette.textMuted }]}
           numberOfLines={1}
@@ -1291,11 +1280,7 @@ function MetricRow({
   sub,
   value,
 }: {
-  palette: {
-    textPrimary: string;
-    textSecondary: string;
-    textMuted: string;
-  };
+  palette: ThemePalette;
   icon: React.ReactNode;
   label: string;
   sub: string;
@@ -1303,7 +1288,7 @@ function MetricRow({
 }) {
   return (
     <View style={styles.metricRow}>
-      <View style={styles.metricIconBox}>{icon}</View>
+      <View style={[styles.metricIconBox, { backgroundColor: palette.accentDim }]}>{icon}</View>
       <View style={styles.metricText}>
         <Text
           style={[styles.metricLabel, { color: palette.textMuted }]}
@@ -1412,7 +1397,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: PURPLE_PALE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1441,7 +1425,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: PURPLE_PALE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1528,7 +1511,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: PURPLE_PALE,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

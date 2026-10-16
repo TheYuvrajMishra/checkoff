@@ -13,6 +13,7 @@ import { useCallback } from 'react';
 import {
   Pressable,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -43,6 +44,10 @@ interface Props {
   accessibilityState?: { checked?: boolean; disabled?: boolean; selected?: boolean };
   children?: React.ReactNode;
   testID?: string;
+  /** Extra press-in hook (e.g. trigger a sheen sweep). Not called when disabled. */
+  onPressIn?: () => void;
+  /** Layout of the inner Pressable. */
+  onLayout?: (e: LayoutChangeEvent) => void;
 }
 
 const SPRING_CONFIG = {
@@ -67,6 +72,8 @@ export function PressableScale({
   accessibilityState,
   children,
   testID,
+  onPressIn,
+  onLayout,
 }: Props) {
   const scale = useSharedValue(1);
 
@@ -78,6 +85,7 @@ export function PressableScale({
     if (disabled) return;
     // eslint-disable-next-line react-hooks/immutability
     scale.value = withSpring(scaleTo, SPRING_CONFIG);
+    onPressIn?.();
   };
   const pressOut = () => {
     // eslint-disable-next-line react-hooks/immutability
@@ -100,6 +108,7 @@ export function PressableScale({
         delayLongPress={delayLongPress}
         onPressIn={pressIn}
         onPressOut={pressOut}
+        onLayout={onLayout}
         disabled={disabled}
         style={innerStyle}
         hitSlop={hitSlop}

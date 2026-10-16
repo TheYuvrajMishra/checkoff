@@ -50,10 +50,12 @@ import {
   TAP,
   type,
   type ThemePalette,
+  useTheme,
 } from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab, FAB_CLEARANCE } from '../../components/Fab';
+import { MetalFill } from '../../components/Button';
 import { PressableScale } from '../../components/PressableScale';
 import { Skeleton } from '../../components/Skeleton';
 import { TaskActionSheet } from '../../components/TaskActionSheet';
@@ -79,12 +81,6 @@ import {
 import type { Category, Priority, TaskInstance } from '../../db/types';
 
 const AnimatedCircle = createAnimatedComponent(Circle);
-
-/** Primary accent — rich purple used for hero-adjacent highlights, ring, dots. */
-const PURPLE = '#8B5CF6';
-const PURPLE_DEEP = '#7C3AED';
-const PURPLE_SOFT = '#A855F7';
-const PURPLE_PALE = 'rgba(139, 92, 246, 0.14)';
 
 type HeroKey = 'dawn' | 'day' | 'dusk' | 'night';
 
@@ -152,10 +148,10 @@ function dayNum(dateStr: string): string {
   return String(Number(dateStr.split('-')[2]));
 }
 
-function priorityDotColor(p: Priority): string {
+function priorityDotColor(p: Priority, theme: ThemePalette): string {
   if (p === 'high') return '#EF4444';
   if (p === 'low') return '#22C55E';
-  return PURPLE;
+  return theme.text;
 }
 
 function priorityLabel(p: Priority): string {
@@ -631,7 +627,7 @@ export default function TodayScreen() {
               <Text style={styles.heroDate} numberOfLines={1}>
                 {heroDateLabel}
               </Text>
-              <Text style={styles.heroDayPct} numberOfLines={1}>
+              <Text style={[styles.heroDayPct, { color: theme.text }]} numberOfLines={1}>
                 DAY {dayPct}%
               </Text>
             </View>
@@ -659,7 +655,7 @@ export default function TodayScreen() {
                 style={styles.dayCellWrap}
                 innerStyle={[
                   styles.dayCell,
-                  { backgroundColor: selected ? PURPLE : 'transparent' },
+                  { backgroundColor: selected ? theme.accent : 'transparent' },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={`${weekdayShort(d)} ${dayNum(d)}`}
@@ -668,7 +664,7 @@ export default function TodayScreen() {
                 <Text
                   style={[
                     styles.dayDow,
-                    { color: selected ? '#FFFFFF' : theme.textFaint },
+                    { color: selected ? theme.onAccent : theme.textFaint },
                   ]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
@@ -696,8 +692,8 @@ export default function TodayScreen() {
                     {
                       backgroundColor: hasTasks
                         ? selected
-                          ? '#FFFFFF'
-                          : PURPLE
+                          ? theme.onAccent
+                          : theme.accent
                         : 'transparent',
                     },
                   ]}
@@ -747,25 +743,25 @@ export default function TodayScreen() {
           </View>
           <View style={[styles.statsRow, { borderTopColor: theme.border }]}>
             <StatCell
-              icon={<Flame color={PURPLE} size={20} strokeWidth={2.2} />}
+              icon={<Flame color={theme.accent} size={20} strokeWidth={2.2} />}
               value={`${header.streak}d`}
               label="Day Streak"
               theme={theme}
             />
             <StatCell
-              icon={<Target color={PURPLE} size={20} strokeWidth={2.2} />}
+              icon={<Target color={theme.accent} size={20} strokeWidth={2.2} />}
               value={`${plannedCount}`}
               label="Tasks Today"
               theme={theme}
             />
             <StatCell
-              icon={<BarChart3 color={PURPLE} size={20} strokeWidth={2.2} />}
+              icon={<BarChart3 color={theme.accent} size={20} strokeWidth={2.2} />}
               value={focusLabel}
               label="Focus Time"
               theme={theme}
             />
             <StatCell
-              icon={<Star color={PURPLE} size={20} strokeWidth={2.2} />}
+              icon={<Star color={theme.accent} size={20} strokeWidth={2.2} />}
               value={`${header.points}`}
               label="Total Points"
               theme={theme}
@@ -829,14 +825,14 @@ export default function TodayScreen() {
             innerStyle={[
               styles.quickSend,
               {
-                backgroundColor: quickTitle.trim() ? PURPLE : theme.surface2,
+                backgroundColor: quickTitle.trim() ? theme.accent : theme.surface2,
               },
             ]}
             accessibilityRole="button"
             accessibilityLabel="Quick add task"
           >
             <Send
-              color={quickTitle.trim() ? '#FFFFFF' : theme.textFaint}
+              color={quickTitle.trim() ? theme.onAccent : theme.textFaint}
               size={17}
               strokeWidth={2.4}
             />
@@ -857,20 +853,20 @@ export default function TodayScreen() {
               hitSlop={HIT_SLOP}
               innerStyle={[
                 styles.toggleInner,
-                viewMode === 'list' && { backgroundColor: PURPLE },
+                viewMode === 'list' && { backgroundColor: theme.accent },
               ]}
               accessibilityRole="button"
               accessibilityLabel="List view"
             >
               <List
-                color={viewMode === 'list' ? '#FFFFFF' : theme.textDim}
+                color={viewMode === 'list' ? theme.onAccent : theme.textDim}
                 size={14}
                 strokeWidth={2}
               />
               <Text
                 style={[
                   styles.toggleText,
-                  { color: viewMode === 'list' ? '#FFFFFF' : theme.textDim },
+                  { color: viewMode === 'list' ? theme.onAccent : theme.textDim },
                 ]}
               >
                 List
@@ -881,20 +877,20 @@ export default function TodayScreen() {
               hitSlop={HIT_SLOP}
               innerStyle={[
                 styles.toggleInner,
-                viewMode === 'timeline' && { backgroundColor: PURPLE },
+                viewMode === 'timeline' && { backgroundColor: theme.accent },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Timeline view"
             >
               <Rows3
-                color={viewMode === 'timeline' ? '#FFFFFF' : theme.textDim}
+                color={viewMode === 'timeline' ? theme.onAccent : theme.textDim}
                 size={14}
                 strokeWidth={2}
               />
               <Text
                 style={[
                   styles.toggleText,
-                  { color: viewMode === 'timeline' ? '#FFFFFF' : theme.textDim },
+                  { color: viewMode === 'timeline' ? theme.onAccent : theme.textDim },
                 ]}
               >
                 Timeline
@@ -914,7 +910,7 @@ export default function TodayScreen() {
           {(
             [
               { key: 'high', label: 'High Prio', dot: '#EF4444' },
-              { key: 'medium', label: 'Med Prio', dot: PURPLE },
+              { key: 'medium', label: 'Med Prio', dot: theme.accent },
               { key: 'low', label: 'Low Prio', dot: '#22C55E' },
             ] as const
           ).map((f) => (
@@ -967,7 +963,7 @@ export default function TodayScreen() {
             {timelineGroups.map((group) => (
               <View key={group.label} style={styles.timelineBlock}>
                 <View style={styles.timelineHeader}>
-                  <View style={[styles.timelineDot, { backgroundColor: PURPLE }]} />
+                  <View style={[styles.timelineDot, { backgroundColor: theme.accent }]} />
                   <Text style={[styles.sectionCaption, { color: theme.textDim }]}>
                     {group.label}
                   </Text>
@@ -1035,8 +1031,8 @@ function FilterChip({
       innerStyle={[
         styles.filterChip,
         {
-          backgroundColor: active ? PURPLE : 'transparent',
-          borderColor: active ? PURPLE : theme.border,
+          backgroundColor: active ? theme.accent : 'transparent',
+          borderColor: active ? theme.accent : theme.border,
         },
       ]}
       accessibilityRole="button"
@@ -1046,13 +1042,13 @@ function FilterChip({
         <View
           style={[
             styles.filterDot,
-            { backgroundColor: active ? '#FFFFFF' : dot },
+            { backgroundColor: active ? theme.onAccent : dot },
           ]}
         />
       )}
       {check === true && (
         <Check
-          color={active ? '#FFFFFF' : theme.textDim}
+          color={active ? theme.onAccent : theme.textDim}
           size={13}
           strokeWidth={2.5}
         />
@@ -1060,7 +1056,7 @@ function FilterChip({
       <Text
         style={[
           styles.filterChipText,
-          { color: active ? '#FFFFFF' : theme.textDim },
+          { color: active ? theme.onAccent : theme.textDim },
         ]}
         numberOfLines={1}
       >
@@ -1094,8 +1090,9 @@ function StatCell({
   );
 }
 
-/** Circular progress ring with a purple gradient stroke. */
+/** Circular progress ring with a monochrome metallic gradient stroke. */
 function ProgressRing({ done, planned }: { done: number; planned: number }) {
+  const theme = useTheme();
   const size = 96;
   const stroke = 10;
   const r = (size - stroke) / 2;
@@ -1121,8 +1118,8 @@ function ProgressRing({ done, planned }: { done: number; planned: number }) {
       <Svg width={size} height={size}>
         <Defs>
           <LinearGradient id="todayRingGrad" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#A855F7" />
-            <Stop offset="1" stopColor={PURPLE_DEEP} />
+            <Stop offset="0" stopColor={theme.text} />
+            <Stop offset="1" stopColor={theme.textDim} />
           </LinearGradient>
         </Defs>
         <Circle
@@ -1191,7 +1188,7 @@ function NextUpCard({
       ) : (
         <View style={styles.nextContent}>
           <View style={styles.nextBadge}>
-            <Text style={styles.nextBadgeText}>NEXT UP</Text>
+            <Text style={[styles.nextBadgeText, { color: theme.text }]}>NEXT UP</Text>
           </View>
           <Text style={styles.nextTitle} numberOfLines={2}>
             {task.title}
@@ -1224,6 +1221,7 @@ function NextUpCard({
               accessibilityRole="button"
               accessibilityLabel="Start timer"
             >
+              <MetalFill kind="light" borderRadius={radius.md} />
               <Play color="#14100C" size={16} strokeWidth={2.5} fill="#14100C" />
               <Text style={styles.nextPrimaryText}>Start Timer</Text>
             </PressableScale>
@@ -1280,8 +1278,8 @@ function DailyRewardStrip({
     >
       <View style={styles.rewardHeader}>
         <View style={styles.rewardLeft}>
-          <View style={styles.rewardIconBox}>
-            <Trophy color={PURPLE} size={24} strokeWidth={2.2} />
+          <View style={[styles.rewardIconBox, { backgroundColor: theme.accentDim }]}>
+            <Trophy color={theme.accent} size={24} strokeWidth={2.2} />
           </View>
           <Text style={[styles.rewardTitle, { color: theme.text }]}>
             Daily Reward
@@ -1311,7 +1309,7 @@ function DailyRewardStrip({
                   style={[
                     styles.rewardConnector,
                     {
-                      backgroundColor: isClaimed ? PURPLE : theme.border,
+                      backgroundColor: isClaimed ? theme.accent : theme.border,
                     },
                   ]}
                 />
@@ -1364,22 +1362,28 @@ function RewardDayNode({
         styles.rewardNode,
         {
           backgroundColor: claimed
-            ? PURPLE
+            ? theme.accent
             : current
-              ? PURPLE_PALE
+              ? theme.accentDim
               : theme.surface,
-          borderColor: claimed || current ? PURPLE : theme.border,
+          borderColor: claimed || current ? theme.accent : theme.border,
           borderWidth: claimed || current ? 2 : 1.5,
         },
-        current && styles.rewardNodeGlow,
+        current && {
+          shadowColor: theme.accent,
+          shadowOpacity: 0.55,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 6,
+        },
         pulseStyle,
       ]}
     >
       {claimed ? (
-        <Check color="#FFFFFF" size={19} strokeWidth={2.6} />
+        <Check color={theme.onAccent} size={19} strokeWidth={2.6} />
       ) : (
         <Trophy
-          color={current ? PURPLE : theme.textFaint}
+          color={current ? theme.accent : theme.textFaint}
           size={18}
           strokeWidth={2.2}
         />
@@ -1414,7 +1418,7 @@ function RewardDayNode({
   );
 }
 
-/** Task row: purple left accent, checkbox, meta row, play + overflow menu. */
+/** Task row: monochrome left accent, checkbox, meta row, play + overflow menu. */
 function TodayTaskRow({
   item,
   theme,
@@ -1442,6 +1446,7 @@ function TodayTaskRow({
         {
           backgroundColor: theme.surface,
           borderColor: theme.border,
+          borderLeftColor: theme.accent,
         },
       ]}
     >
@@ -1460,12 +1465,12 @@ function TodayTaskRow({
             style={[
               styles.checkCircle,
               {
-                borderColor: done ? PURPLE : theme.borderStrong,
-                backgroundColor: done ? PURPLE : 'transparent',
+                borderColor: done ? theme.accent : theme.borderStrong,
+                backgroundColor: done ? theme.accent : 'transparent',
               },
             ]}
           >
-            {done && <Check color="#FFFFFF" size={14} strokeWidth={3} />}
+            {done && <Check color={theme.onAccent} size={14} strokeWidth={3} />}
           </View>
         </Pressable>
 
@@ -1498,14 +1503,14 @@ function TodayTaskRow({
             </Text>
             <Text style={[styles.taskMetaText, { color: theme.textFaint }]}>·</Text>
             <View
-              style={[styles.prioDot, { backgroundColor: priorityDotColor(prio) }]}
+              style={[styles.prioDot, { backgroundColor: priorityDotColor(prio, theme) }]}
             />
             <Text style={[styles.taskMetaText, { color: theme.textDim }]}>
               {priorityLabel(prio)}
             </Text>
             {overdue && !done && (
-              <View style={styles.lateBadge}>
-                <Text style={styles.lateBadgeText}>LATE</Text>
+              <View style={[styles.lateBadge, { backgroundColor: theme.accent }]}>
+                <Text style={[styles.lateBadgeText, { color: theme.onAccent }]}>LATE</Text>
               </View>
             )}
           </View>
@@ -1518,7 +1523,7 @@ function TodayTaskRow({
           accessibilityRole="button"
           accessibilityLabel="Start timer"
         >
-          <Play color={PURPLE} size={17} strokeWidth={2.4} />
+          <Play color={theme.accent} size={17} strokeWidth={2.4} />
         </PressableScale>
         <PressableScale
           onPress={onMenu}
@@ -1580,7 +1585,6 @@ const styles = StyleSheet.create({
     ...type.mono,
     fontSize: 11,
     letterSpacing: 1.2,
-    color: PURPLE_SOFT,
     fontWeight: '700',
   },
   heroBottom: {
@@ -1776,7 +1780,6 @@ const styles = StyleSheet.create({
     ...type.caption,
     fontSize: 10,
     letterSpacing: 1.4,
-    color: PURPLE_SOFT,
   },
   nextTitle: {
     ...type.h2,
@@ -1817,9 +1820,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     borderRadius: radius.md,
     minHeight: TAP,
+    overflow: 'hidden',
   },
   nextPrimaryText: {
     ...type.label,
@@ -1861,7 +1865,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: radius.md,
-    backgroundColor: PURPLE_PALE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1901,13 +1904,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  rewardNodeGlow: {
-    shadowColor: PURPLE,
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
   },
   rewardDayLabel: {
     ...type.caption,
@@ -2014,7 +2010,6 @@ const styles = StyleSheet.create({
   taskCard: {
     borderWidth: 1,
     borderLeftWidth: 3,
-    borderLeftColor: PURPLE,
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
@@ -2068,7 +2063,6 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   lateBadge: {
-    backgroundColor: PURPLE,
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -2078,7 +2072,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.8,
-    color: '#FFFFFF',
   },
   playBtn: {
     width: 40,
