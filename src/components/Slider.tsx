@@ -9,18 +9,20 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { haptics } from '../haptics';
-import { HIT_SLOP, radius, space, TAP, type, useTheme } from '../theme/tokens';
+import { HIT_SLOP, radius, space, TAP, type, useTheme, type ThemePalette } from '../theme/tokens';
 import { PressableScale } from './PressableScale';
 
 interface Props {
   label?: string;
   value: number;
-  min: number;
-  max: number;
+  min?: number;
+  max?: number;
   step?: number;
   suffix?: string;
   formatValue?: (val: number) => string;
   presets?: number[];
+  options?: number[];
+  palette?: ThemePalette;
   onChange: (val: number) => void;
   style?: StyleProp<ViewStyle>;
 }
@@ -35,16 +37,23 @@ interface Props {
 export function Slider({
   label,
   value,
-  min,
-  max,
+  min: propMin,
+  max: propMax,
   step = 1,
   suffix = '',
   formatValue,
-  presets,
+  presets: propPresets,
+  options,
+  palette: propPalette,
   onChange,
   style,
 }: Props) {
-  const theme = useTheme();
+  const currentTheme = useTheme();
+  const theme = propPalette ?? currentTheme;
+
+  const min = options && options.length > 0 ? options[0] : (propMin ?? 0);
+  const max = options && options.length > 0 ? options[options.length - 1] : (propMax ?? 100);
+  const presets = propPresets ?? options;
   const [trackWidth, setTrackWidth] = useState(0);
   const [liveValue, setLiveValue] = useState(value);
   const [dragging, setDragging] = useState(false);

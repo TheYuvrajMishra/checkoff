@@ -9,6 +9,7 @@ import { useUiStore } from '../state/ui';
  */
 
 export type ThemeName = 'dark' | 'light';
+export type Priority = 'low' | 'medium' | 'high';
 
 export interface ThemePalette {
   name: ThemeName;
@@ -33,6 +34,16 @@ export interface ThemePalette {
   /** Subtle surface sheen gradient stops for primary buttons */
   buttonSheen: [string, string, string];
   backdrop: string;
+
+  // Phase 5 & 6 semantic aliases
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  textInverse: string;
+  bgSurface: string;
+  bgElevated: string;
+  borderSubtle: string;
+  priority: Record<Priority, string>;
 }
 
 export const dark: ThemePalette = {
@@ -56,6 +67,19 @@ export const dark: ThemePalette = {
   metallic: ['#FFFFFF', '#E5E5E5', '#8C8C8C', '#F5F5F5'],
   buttonSheen: ['#FFFFFF', '#E8E8E8', '#D4D4D4'],
   backdrop: 'rgba(0, 0, 0, 0.78)',
+
+  textPrimary: '#FFFFFF',
+  textSecondary: '#A3A3A3',
+  textMuted: '#5C5C5C',
+  textInverse: '#000000',
+  bgSurface: '#0A0A0A',
+  bgElevated: '#111111',
+  borderSubtle: 'rgba(255, 255, 255, 0.10)',
+  priority: {
+    high: '#FFFFFF',
+    medium: '#A3A3A3',
+    low: '#5C5C5C',
+  },
 };
 
 export const light: ThemePalette = {
@@ -79,6 +103,19 @@ export const light: ThemePalette = {
   metallic: ['#000000', '#3B3B3B', '#737373', '#141414'],
   buttonSheen: ['#1F1F1F', '#0A0A0A', '#000000'],
   backdrop: 'rgba(0, 0, 0, 0.48)',
+
+  textPrimary: '#000000',
+  textSecondary: '#525252',
+  textMuted: '#8A8A8A',
+  textInverse: '#FFFFFF',
+  bgSurface: '#F7F7F7',
+  bgElevated: '#EFEFEF',
+  borderSubtle: 'rgba(0, 0, 0, 0.10)',
+  priority: {
+    high: '#000000',
+    medium: '#525252',
+    low: '#8A8A8A',
+  },
 };
 
 export function useTheme(): ThemePalette {
@@ -88,10 +125,6 @@ export function useTheme(): ThemePalette {
 export const CATEGORY_TOKENS = ['slate', 'amber', 'teal', 'violet', 'rose', 'sage'] as const;
 export type CategoryToken = (typeof CATEGORY_TOKENS)[number];
 
-/**
- * Strict monotone luminance markers for categories.
- * Keeps existing DB token names intact while rendering strictly in monochrome.
- */
 export const categoryColors: Record<CategoryToken, string> = {
   slate: '#FFFFFF',
   amber: '#D9D9D9',
@@ -110,8 +143,32 @@ export const categoryColorsLight: Record<CategoryToken, string> = {
   sage: '#A3A3A3',
 };
 
-export function categoryColor(token: string, themeName: ThemeName = 'dark'): string {
-  const map = themeName === 'light' ? categoryColorsLight : categoryColors;
+/**
+ * Handles all call signatures:
+ * - categoryColor(token, themeName)
+ * - categoryColor(token, themePalette)
+ * - categoryColor(themePalette, token)
+ */
+export function categoryColor(
+  first: string | ThemePalette,
+  second?: ThemeName | ThemePalette | string
+): string {
+  let token = 'slate';
+  let isLight = false;
+
+  if (typeof first === 'object' && first !== null) {
+    isLight = first.name === 'light';
+    if (typeof second === 'string') token = second;
+  } else {
+    if (typeof first === 'string') token = first;
+    if (typeof second === 'object' && second !== null) {
+      isLight = second.name === 'light';
+    } else if (second === 'light') {
+      isLight = true;
+    }
+  }
+
+  const map = isLight ? categoryColorsLight : categoryColors;
   return (map as Record<string, string>)[token] ?? map.slate;
 }
 
@@ -124,31 +181,44 @@ export function priorityRuleColor(
   return theme.textFaint;
 }
 
-interface TextStyle {
+export interface TextStyle {
   fontSize: number;
   lineHeight: number;
-  fontWeight: '400' | '500' | '600' | '700';
+  fontWeight: '400' | '500' | '600' | '700' | '800';
   fontFamily?: string;
   letterSpacing?: number;
 }
 
 export const MONO = 'monospace';
 
-export const type: Record<
-  'display' | 'h1' | 'h2' | 'h3' | 'body' | 'small' | 'caption' | 'mono' | 'clock' | 'statBig',
-  TextStyle
-> = {
-  display: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: -0.8 },
-  h1: { fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.5 },
-  h2: { fontSize: 18, lineHeight: 24, fontWeight: '600', letterSpacing: -0.2 },
-  h3: { fontSize: 15, lineHeight: 20, fontWeight: '600', letterSpacing: -0.1 },
-  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
-  small: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
-  caption: { fontSize: 11, lineHeight: 14, fontWeight: '600', letterSpacing: 1.0 },
-  mono: { fontSize: 13, lineHeight: 18, fontWeight: '500', fontFamily: MONO },
-  clock: { fontSize: 54, lineHeight: 60, fontWeight: '700', fontFamily: MONO, letterSpacing: -1.5 },
-  statBig: { fontSize: 32, lineHeight: 38, fontWeight: '700', fontFamily: MONO, letterSpacing: -0.8 },
+export const type = {
+  hero: { fontSize: 32, lineHeight: 38, fontWeight: '700', letterSpacing: -0.6 } as TextStyle,
+  display: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: -0.8 } as TextStyle,
+  h1: { fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.5 } as TextStyle,
+  h2: { fontSize: 18, lineHeight: 24, fontWeight: '600', letterSpacing: -0.2 } as TextStyle,
+  h3: { fontSize: 15, lineHeight: 20, fontWeight: '600', letterSpacing: -0.1 } as TextStyle,
+  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' } as TextStyle,
+  bodyMedium: { fontSize: 15, lineHeight: 22, fontWeight: '500' } as TextStyle,
+  bodyStrong: { fontSize: 15, lineHeight: 22, fontWeight: '600' } as TextStyle,
+  bodySm: { fontSize: 13, lineHeight: 18, fontWeight: '400' } as TextStyle,
+  small: { fontSize: 13, lineHeight: 18, fontWeight: '400' } as TextStyle,
+  caption: { fontSize: 11, lineHeight: 14, fontWeight: '600', letterSpacing: 1.0 } as TextStyle,
+  label: { fontSize: 11, lineHeight: 14, fontWeight: '600', letterSpacing: 1.0 } as TextStyle,
+  mono: { fontSize: 13, lineHeight: 18, fontWeight: '500', fontFamily: MONO } as TextStyle,
+  monoSm: { fontSize: 11, lineHeight: 15, fontWeight: '500', fontFamily: MONO } as TextStyle,
+  monoSmall: { fontSize: 11, lineHeight: 15, fontWeight: '600', fontFamily: MONO } as TextStyle,
+  monoLg: { fontSize: 18, lineHeight: 24, fontWeight: '700', fontFamily: MONO } as TextStyle,
+  clock: { fontSize: 54, lineHeight: 60, fontWeight: '700', fontFamily: MONO, letterSpacing: -1.5 } as TextStyle,
+  statBig: { fontSize: 32, lineHeight: 38, fontWeight: '700', fontFamily: MONO, letterSpacing: -0.8 } as TextStyle,
 };
+
+export const MOTION = {
+  fast: 150,
+  normal: 180,
+  slow: 240,
+} as const;
+
+export const motion = MOTION;
 
 /** 16 to 24pt primary surface radii on an 8pt system */
 export const radius = {
@@ -160,13 +230,40 @@ export const radius = {
   pill: 999,
 };
 
-/** 8pt grid. */
-export const space = (n: number): number => n * 8;
+/**
+ * 8pt grid.
+ * Callable as space(2) -> 16, and accessible as space.xs, space.sm, space.md, space.base, etc.
+ */
+interface SpaceFn {
+  (n: number): number;
+  xs: number;
+  sm: number;
+  md: number;
+  base: number;
+  lg: number;
+  xl: number;
+  '2xl': number;
+  '3xl': number;
+}
+
+const spaceCalculator = ((n: number): number => n * 8) as SpaceFn;
+spaceCalculator.xs = 4;
+spaceCalculator.sm = 8;
+spaceCalculator.md = 12;
+spaceCalculator.base = 16;
+spaceCalculator.lg = 20;
+spaceCalculator.xl = 24;
+spaceCalculator['2xl'] = 32;
+spaceCalculator['3xl'] = 48;
+
+export const space: SpaceFn = spaceCalculator;
 
 /** Minimum tap target (48dp). */
 export const TAP = 48;
 
 export const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 } as const;
+export const hitSlop8 = { top: 8, bottom: 8, left: 8, right: 8 } as const;
+export const hitSlop12 = { top: 12, bottom: 12, left: 12, right: 12 } as const;
 
 export const shadow = {
   sm: {
@@ -191,4 +288,3 @@ export const shadow = {
     shadowOffset: { width: 0, height: 10 },
   },
 };
-

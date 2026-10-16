@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Text, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   interpolateColor,
@@ -8,12 +7,15 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { haptics } from '../haptics';
-import { HIT_SLOP, useTheme } from '../theme/tokens';
+import { HIT_SLOP, space, type, useTheme, type ThemePalette } from '../theme/tokens';
 
 interface Props {
   value: boolean;
   onValueChange: (next: boolean) => void;
   disabled?: boolean;
+  label?: string;
+  description?: string;
+  palette?: ThemePalette;
   accessibilityLabel?: string;
 }
 
@@ -28,8 +30,17 @@ const TRAVEL = TRACK_W - THUMB_SIZE - PAD * 2; // 24dp
  * Zero-bounce 180ms eased thumb transition with clear visual ON (solid foreground + line marker)
  * and OFF (recessed surface + hollow circle marker) states.
  */
-export function Switch({ value, onValueChange, disabled = false, accessibilityLabel }: Props) {
-  const theme = useTheme();
+export function Switch({
+  value,
+  onValueChange,
+  disabled = false,
+  label,
+  description,
+  palette: propPalette,
+  accessibilityLabel,
+}: Props) {
+  const currentTheme = useTheme();
+  const theme = propPalette ?? currentTheme;
   const progress = useSharedValue(value ? 1 : 0);
 
   useEffect(() => {
@@ -63,13 +74,13 @@ export function Switch({ value, onValueChange, disabled = false, accessibilityLa
     onValueChange(!value);
   };
 
-  return (
+  const switchControl = (
     <Pressable
       onPress={toggle}
       disabled={disabled}
       hitSlop={HIT_SLOP}
       accessibilityRole="switch"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ checked: value, disabled }}
       style={[styles.touchTarget, disabled && styles.disabled]}
     >
@@ -92,9 +103,48 @@ export function Switch({ value, onValueChange, disabled = false, accessibilityLa
       </Animated.View>
     </Pressable>
   );
+
+  if (label) {
+    return (
+      <View style={styles.row}>
+        <View style={styles.textCol}>
+          <Text style={[styles.labelText, { color: theme.text }]} numberOfLines={1}>
+            {label}
+          </Text>
+          {description ? (
+            <Text style={[styles.descText, { color: theme.textDim }]} numberOfLines={2}>
+              {description}
+            </Text>
+          ) : null}
+        </View>
+        {switchControl}
+      </View>
+    );
+  }
+
+  return switchControl;
 }
 
 const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    minHeight: 48,
+  },
+  textCol: {
+    flex: 1,
+    gap: 2,
+  },
+  labelText: {
+    ...type.bodyMedium,
+    fontSize: 15,
+  },
+  descText: {
+    ...type.caption,
+    fontSize: 12,
+  },
   touchTarget: {
     minWidth: 56,
     minHeight: 48,
