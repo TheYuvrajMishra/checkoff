@@ -9,12 +9,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Text as SvgText } from 'react-native-svg';
-import { type, useTheme, type ThemePalette } from '../theme/tokens';
+import { useTheme } from '../theme/tokens';
 
 interface Props {
   children: string | number;
-  variant?: keyof typeof type;
-  palette?: ThemePalette;
   style?: StyleProp<TextStyle>;
   containerStyle?: StyleProp<ViewStyle>;
   numberOfLines?: number;
@@ -30,8 +28,6 @@ interface Props {
  */
 export function MetallicText({
   children,
-  variant,
-  palette: propPalette,
   style,
   containerStyle,
   numberOfLines = 1,
@@ -39,15 +35,12 @@ export function MetallicText({
   minimumFontScale = 0.7,
   align = 'left',
 }: Props) {
-  const currentTheme = useTheme();
-  const theme = propPalette ?? currentTheme;
+  const theme = useTheme();
   const rawId = useId();
   const gradId = `metal_${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
   const [box, setBox] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
-  const variantStyle = variant && type[variant] ? type[variant] : undefined;
-  const combinedStyle = [variantStyle, style];
-  const flat = StyleSheet.flatten(combinedStyle) ?? {};
+  const flat = StyleSheet.flatten(style) ?? {};
   const fontSize = typeof flat.fontSize === 'number' ? flat.fontSize : 24;
   const lineHeight = typeof flat.lineHeight === 'number' ? flat.lineHeight : Math.round(fontSize * 1.2);
   const fontWeight = flat.fontWeight ?? '700';

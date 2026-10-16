@@ -150,47 +150,5 @@ export const haptics = {
         }
       }
     });
-  /** Basic light impact. */
-  light(): Promise<void> {
-    return safe(() => impact(Haptics.ImpactFeedbackStyle.Light));
-  },
-
-  /** Basic medium impact. */
-  medium(): Promise<void> {
-    return safe(() => impact(Haptics.ImpactFeedbackStyle.Medium));
-  },
-
-  /** Basic heavy impact. */
-  heavy(): Promise<void> {
-    return safe(() => impact(Haptics.ImpactFeedbackStyle.Heavy));
-  },
-
-  /** Notification success. */
-  success(): Promise<void> {
-    return safe(() => notify(Haptics.NotificationFeedbackType.Success));
-  },
-
-  /** Notification warning. */
-  warning(): Promise<void> {
-    return safe(() => notify(Haptics.NotificationFeedbackType.Warning));
-  },
-
-  /** Notification error. */
-  error(): Promise<void> {
-    return safe(() => notify(Haptics.NotificationFeedbackType.Error));
-  },
-
-  /** Tick feedback. */
-  tick(): Promise<void> {
-    return safe(() => impact(Haptics.ImpactFeedbackStyle.Light));
   },
 };
-
-export const hapticSelection = () => haptics.selection();
-export const hapticSuccess = () => haptics.success();
-export const hapticLight = () => haptics.light();
-export const hapticMedium = () => haptics.medium();
-export const hapticHeavy = () => haptics.heavy();
-export const hapticWarning = () => haptics.warning();
-export const hapticError = () => haptics.error();
-export const hapticTick = () => haptics.tick();

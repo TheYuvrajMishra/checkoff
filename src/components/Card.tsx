@@ -1,8 +1,6 @@
 import { StyleSheet, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
-import { radius, space, useTheme, type ThemePalette } from '../theme/tokens';
+import { radius, space, useTheme } from '../theme/tokens';
 import { PressableScale } from './PressableScale';
-
-export type CardPadding = number | 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 interface Props {
   children: React.ReactNode;
@@ -13,33 +11,11 @@ interface Props {
   leftRuleColor?: string;
   onPress?: (e: GestureResponderEvent) => void;
   onLongPress?: (e: GestureResponderEvent) => void;
-  padding?: CardPadding;
-  palette?: ThemePalette;
+  /** Either an 8pt multiplier (<= 6, e.g. 2 -> 16px) or raw pixel value (e.g. space(2)) */
+  padding?: number;
   style?: StyleProp<ViewStyle>;
   innerStyle?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
-}
-
-function resolveCardPadding(pad: CardPadding): number {
-  if (typeof pad === 'number') {
-    return pad > 0 && pad <= 6 ? space(pad) : pad;
-  }
-  switch (pad) {
-    case 'none':
-      return 0;
-    case 'xs':
-      return space.xs;
-    case 'sm':
-      return space.sm;
-    case 'md':
-      return space.md;
-    case 'lg':
-      return space.base;
-    case 'xl':
-      return space.lg;
-    default:
-      return space.base;
-  }
 }
 
 /**
@@ -56,15 +32,13 @@ export function Card({
   onPress,
   onLongPress,
   padding = space(2),
-  palette: propPalette,
   style,
   innerStyle,
   accessibilityLabel,
 }: Props) {
-  const currentTheme = useTheme();
-  const theme = propPalette ?? currentTheme;
+  const theme = useTheme();
   const resolvedVariant = elevated ? 'elevated' : variant;
-  const resolvedPadding = resolveCardPadding(padding);
+  const resolvedPadding = padding > 0 && padding <= 6 ? space(padding) : padding;
 
   const bg =
     resolvedVariant === 'elevated'

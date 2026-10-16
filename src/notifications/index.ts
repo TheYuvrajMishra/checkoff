@@ -517,13 +517,9 @@ export async function scheduleTaskAlarm(
 }
 
 export async function cancelTaskAlarm(
-  first: SQLiteDatabase | string,
-  second?: string
+  db: SQLiteDatabase,
+  instanceId: string
 ): Promise<void> {
-  const db = (typeof first === 'object' && first !== null ? first : notificationsDb) as SQLiteDatabase | null;
-  const instanceId = typeof first === 'string' ? first : second;
-  if (!db || !instanceId) return;
-
   try {
     await ensureScheduledAlarmsTable(db);
     const row = await db.getFirstAsync<{ notification_id: string }>(
