@@ -33,6 +33,7 @@ import { CalendarDays, Check, SkipForward } from 'lucide-react-native';
 import { categoryColor, radius, shadow, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import type { TaskInstance } from '../db/types';
 import { haptics } from '../haptics';
+import { PressableScale } from './PressableScale';
 
 const SWIPE_COMPLETE_AT = 90;
 const SWIPE_OPEN_AT = -110;
@@ -140,6 +141,15 @@ export function TaskRow({
   const translateX = useRef(new RNAnimated.Value(0)).current;
   const openRef = useRef(false);
   const pressScale = useSharedValue(1);
+  // Swipe-threshold ticks fire once per gesture (reset on release).
+  const tickedRight = useRef(false);
+  const tickedLeft = useRef(false);
+  // The PanResponder is created once; keep a live ref to status so the
+  // threshold logic never acts on a stale closure.
+  const statusRef = useRef(item.status);
+  useEffect(() => {
+    statusRef.current = item.status;
+  }, [item.status]);
 
   const pressStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pressScale.value }],
@@ -154,6 +164,8 @@ export function TaskRow({
 
   const snapBack = () => {
     openRef.current = false;
+    tickedRight.current = false;
+    tickedLeft.current = false;
     RNAnimated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
   };
 
@@ -166,10 +178,22 @@ export function TaskRow({
         // Clamp: allow a full right-swipe pull, limited left reveal.
         const dx = Math.max(-ACTIONS_WIDTH - 24, Math.min(g.dx, 130));
         translateX.setValue(dx);
+        // Haptic tick the moment the gesture crosses an action threshold.
+        if (statusRef.current === 'pending') {
+          if (dx >= SWIPE_COMPLETE_AT && !tickedRight.current) {
+            tickedRight.current = true;
+            void haptics.check();
+          } else if (dx <= SWIPE_OPEN_AT && !tickedLeft.current) {
+            tickedLeft.current = true;
+            void haptics.check();
+          }
+        }
       },
       onPanResponderRelease: (_, g) => {
-        if (g.dx >= SWIPE_COMPLETE_AT && item.status === 'pending') {
-          // Swipe right → complete with haptic, then reset.
+        tickedRight.current = false;
+        tickedLeft.current = false;
+        if (g.dx >= SWIPE_COMPLETE_AT && statusRef.current === 'pending') {
+          // Swipe right → complete (haptic fires via onToggle), then reset.
           RNAnimated.timing(translateX, {
             toValue: 130,
             duration: 120,
@@ -178,9 +202,8 @@ export function TaskRow({
             onToggle();
             translateX.setValue(0);
           });
-        } else if (g.dx <= SWIPE_OPEN_AT && item.status === 'pending') {
+        } else if (g.dx <= SWIPE_OPEN_AT && statusRef.current === 'pending') {
           // Swipe left → reveal actions (pending tasks only).
-          void haptics.check();
           openRef.current = true;
           RNAnimated.spring(translateX, {
             toValue: -ACTIONS_WIDTH,
@@ -214,30 +237,32 @@ export function TaskRow({
       </View>
       {/* Underlay: swipe-left actions */}
       <View style={[styles.underlay, styles.underlayRight]}>
-        <Pressable
+        <PressableScale
           onPress={() => {
             snapBack();
             onSkip();
           }}
-          style={[styles.actionBtn, { backgroundColor: theme.surface2 }]}
+          style={styles.actionBtn}
+          innerStyle={[styles.actionInner, { backgroundColor: theme.surface2 }]}
           accessibilityRole="button"
           accessibilityLabel="Skip task"
         >
           <SkipForward color={theme.textDim} size={18} strokeWidth={2} />
           <Text style={[styles.actionLabel, { color: theme.textDim }]}>Skip</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
           onPress={() => {
             snapBack();
             onReschedule();
           }}
-          style={[styles.actionBtn, { backgroundColor: theme.accentDim }]}
+          style={styles.actionBtn}
+          innerStyle={[styles.actionInner, { backgroundColor: theme.accentDim }]}
           accessibilityRole="button"
           accessibilityLabel="Reschedule task"
         >
           <CalendarDays color={theme.accent} size={18} strokeWidth={2} />
           <Text style={[styles.actionLabel, { color: theme.accent }]}>Move</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       <RNAnimated.View
@@ -330,13 +355,13 @@ export function TaskRow({
         </View>
 
         {item.status === 'pending' && (
-          <Pressable
+          <PressableScale
             onPress={onSkip}
             style={[styles.skipBtn, { minHeight: TAP }]}
             hitSlop={8}
           >
             <Text style={[styles.small, { color: theme.textFaint }]}>Skip</Text>
-          </Pressable>
+          </PressableScale>
         )}
       </RNAnimated.View>
     </View>
@@ -360,6 +385,9 @@ const styles = StyleSheet.create({
   actionBtn: {
     width: ACTIONS_WIDTH / 2,
     height: '100%',
+  },
+  actionInner: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: space(0.5),

@@ -5,13 +5,14 @@
  * meta table (source of truth) and mirror into the UI store for fast reads.
  */
 import { useCallback } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useDb } from '../db/useDb';
 import { setMeta, META_KEYS } from '../db/repos/meta';
 import { useUiStore, type HapticIntensity, type ThemeName } from '../state/ui';
 import { configureHaptics } from '../haptics';
 import { dark, light, space, TAP, type as type } from '../theme/tokens';
 import { updaterActions, useUpdaterStore } from '../updates/updaterStore';
+import { PressableScale } from '../components/PressableScale';
 import pkg from '../../package.json';
 
 const GRACE_OPTIONS = [5, 10, 15, 30];
@@ -74,7 +75,7 @@ export default function SettingsScreen() {
           <Text style={styles.rowLabel}>Theme</Text>
           <View style={styles.segment}>
             {(['dark', 'light'] as ThemeName[]).map((t) => (
-              <Pressable
+              <PressableScale
                 key={t}
                 accessibilityRole="button"
                 onPress={() => setTheme(t)}
@@ -83,7 +84,7 @@ export default function SettingsScreen() {
                 <Text style={[styles.segmentText, ui.theme === t && styles.segmentTextActive]}>
                   {t === 'dark' ? 'Dark' : 'Light'}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
         </View>
@@ -100,7 +101,7 @@ export default function SettingsScreen() {
           <Text style={styles.rowLabel}>Intensity</Text>
           <View style={styles.segment}>
             {INTENSITY_OPTIONS.map((opt) => (
-              <Pressable
+              <PressableScale
                 key={opt}
                 accessibilityRole="button"
                 onPress={() => setIntensity(opt)}
@@ -111,7 +112,7 @@ export default function SettingsScreen() {
                 >
                   {opt[0].toUpperCase() + opt.slice(1)}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
         </View>
@@ -127,7 +128,7 @@ export default function SettingsScreen() {
         </View>
         <View style={styles.optionsRow}>
           {GRACE_OPTIONS.map((min) => (
-            <Pressable
+            <PressableScale
               key={min}
               accessibilityRole="button"
               onPress={() => setGrace(min)}
@@ -136,7 +137,7 @@ export default function SettingsScreen() {
               <Text style={[styles.optionText, ui.graceMin === min && styles.optionTextActive]}>
                 {min}m
               </Text>
-            </Pressable>
+            </PressableScale>
           ))}
         </View>
         <View style={styles.divider} />
@@ -148,7 +149,7 @@ export default function SettingsScreen() {
         </View>
         <View style={styles.optionsRow}>
           {SNOOZE_OPTIONS.map((min) => (
-            <Pressable
+            <PressableScale
               key={min}
               accessibilityRole="button"
               onPress={() => setSnooze(min)}
@@ -157,7 +158,7 @@ export default function SettingsScreen() {
               <Text style={[styles.optionText, ui.snoozeMin === min && styles.optionTextActive]}>
                 {min}m
               </Text>
-            </Pressable>
+            </PressableScale>
           ))}
         </View>
       </View>
@@ -171,7 +172,7 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <View style={styles.divider} />
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           onPress={() => void updaterActions.runCheck(true)}
           style={styles.row}
@@ -190,7 +191,7 @@ export default function SettingsScreen() {
                       : 'Up to date'}
             </Text>
           </View>
-        </Pressable>
+        </PressableScale>
         <View style={styles.divider} />
         <View style={styles.row}>
           <Text style={styles.rowValue}>Data stays on this device. No accounts, no network.</Text>

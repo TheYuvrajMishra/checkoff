@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +18,8 @@ import { dark, light, radius, space, TAP, type } from '../../theme/tokens';
 import { titlesForEvents } from '../../stats/queries';
 import { addDays, localDateString } from '../../db/time';
 import type { LogEvent, LogEventType } from '../../db/types';
+import { Skeleton } from '../../components/Skeleton';
+import { PressableScale } from '../../components/PressableScale';
 
 const TYPE_FILTERS: ('all' | LogEventType)[] = [
   'all',
@@ -223,20 +224,20 @@ export default function LogScreen() {
     <SafeAreaView style={[styles.root, { backgroundColor: p.bg }]}>
       {/* Day pager */}
       <View style={styles.pager}>
-        <Pressable
+        <PressableScale
           accessibilityLabel="Previous day"
           onPress={() => shiftDay(-1)}
           style={[styles.pagerBtn, { borderColor: p.border }]}
           hitSlop={8}
         >
           <Text style={[styles.pagerGlyph, { color: p.text }]}>‹</Text>
-        </Pressable>
-        <Pressable onPress={() => setDay(today)} hitSlop={8}>
+        </PressableScale>
+        <PressableScale onPress={() => setDay(today)} hitSlop={8}>
           <Text style={[styles.dayLabel, { color: p.text }]}>
             {day === today ? 'Today' : day}
           </Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
           accessibilityLabel="Next day"
           onPress={() => shiftDay(1)}
           disabled={day >= today}
@@ -244,12 +245,12 @@ export default function LogScreen() {
           hitSlop={8}
         >
           <Text style={[styles.pagerGlyph, { color: p.text }]}>›</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {/* Export */}
       <View style={styles.exportRow}>
-        <Pressable
+        <PressableScale
           accessibilityLabel="Export as JSON"
           onPress={() => exportLog('json')}
           disabled={exporting || visible.length === 0}
@@ -259,8 +260,8 @@ export default function LogScreen() {
           ]}
         >
           <Text style={[styles.exportLabel, { color: p.text }]}>JSON</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
           accessibilityLabel="Export as CSV"
           onPress={() => exportLog('csv')}
           disabled={exporting || visible.length === 0}
@@ -270,7 +271,7 @@ export default function LogScreen() {
           ]}
         >
           <Text style={[styles.exportLabel, { color: p.text }]}>CSV</Text>
-        </Pressable>
+        </PressableScale>
         <Text style={[styles.exportHint, { color: p.textFaint }]}>
           {exporting ? 'Preparing…' : `${visible.length} events`}
         </Text>
@@ -286,7 +287,7 @@ export default function LogScreen() {
         renderItem={({ item: t }) => {
           const active = typeFilter === t;
           return (
-            <Pressable
+            <PressableScale
               onPress={() => setTypeFilter(t)}
               style={[
                 styles.typeChip,
@@ -304,7 +305,7 @@ export default function LogScreen() {
               >
                 {t}
               </Text>
-            </Pressable>
+            </PressableScale>
           );
         }}
       />
@@ -325,10 +326,7 @@ export default function LogScreen() {
       {loading ? (
         <View style={styles.list}>
           {[0, 1, 2].map((i) => (
-            <View
-              key={i}
-              style={[styles.row, styles.skeleton, { backgroundColor: p.surface }]}
-            />
+            <Skeleton key={i} height={96} borderRadius={radius.md} />
           ))}
         </View>
       ) : (
@@ -408,7 +406,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: space(2),
   },
-  skeleton: { height: 96, opacity: 0.5 },
   time: { ...type.mono },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: space(1) },
   chip: {

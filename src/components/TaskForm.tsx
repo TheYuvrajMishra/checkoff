@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Platform,
-  Pressable,
   StyleSheet,
   Switch,
   Text,
@@ -13,6 +12,8 @@ import type { Category, Recurrence, TaskPriority } from '../db/types';
 import { CATEGORY_TOKENS, categoryColor, dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import { addDays, localDateString } from '../db/time';
 import { useUiStore } from '../state/ui';
+import { haptics } from '../haptics';
+import { PressableScale } from './PressableScale';
 
 export interface TaskFormValues {
   title: string;
@@ -212,9 +213,13 @@ export function TaskForm({ categories, showInstanceDate, initialDate, initialVal
         <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>
       )}
 
-      <Pressable onPress={submit} style={[styles.submit, { backgroundColor: theme.accent }]}>
+      <PressableScale
+        onPress={submit}
+        style={[styles.submit]}
+        innerStyle={[styles.submitInner, { backgroundColor: theme.accent }]}
+      >
         <Text style={[styles.submitText, { color: theme.onAccent }]}>{submitLabel}</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -233,7 +238,7 @@ export function Chip({
   dot?: string;
 }) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       style={[
         styles.chip,
@@ -247,7 +252,7 @@ export function Chip({
       <Text style={[styles.small, { color: selected ? theme.text : theme.textDim }]}>
         {label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -271,27 +276,34 @@ export function NumStepper({
   onChange: (v: number) => void;
 }) {
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  // Selection detent: a light tick on every step.
+  const stepped = (v: number) => {
+    void haptics.check();
+    onChange(clamp(v));
+  };
   return (
     <View style={styles.numStepper}>
       <Text style={[styles.caption, { color: theme.textFaint }]}>{label.toUpperCase()}</Text>
       <View style={styles.numRow}>
-        <Pressable
-          onPress={() => onChange(clamp(value - step))}
+        <PressableScale
+          onPress={() => stepped(value - step)}
+          tick={false}
           style={[styles.numBtn, { borderColor: theme.border }]}
           hitSlop={6}
         >
           <Text style={[styles.numBtnText, { color: theme.text }]}>-</Text>
-        </Pressable>
+        </PressableScale>
         <Text style={[styles.body, styles.numValue, { color: theme.text, fontVariant: ['tabular-nums'] }]}>
           {value}{suffix}
         </Text>
-        <Pressable
-          onPress={() => onChange(clamp(value + step))}
+        <PressableScale
+          onPress={() => stepped(value + step)}
+          tick={false}
           style={[styles.numBtn, { borderColor: theme.border }]}
           hitSlop={6}
         >
           <Text style={[styles.numBtnText, { color: theme.text }]}>+</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );
@@ -322,14 +334,14 @@ export function NativeTimeButton({
 
   return (
     <View>
-      <Pressable
+      <PressableScale
         onPress={() => setShow(true)}
         style={[styles.timeButton, { borderColor: theme.border, backgroundColor: theme.surface2 }]}
       >
         <Text style={[styles.timeButtonText, { color: theme.text, fontVariant: ['tabular-nums'] }]}>
           {pad2(hour)}:{pad2(minute)}
         </Text>
-      </Pressable>
+      </PressableScale>
       {show && (
         <DateTimePicker
           value={value}
@@ -366,7 +378,7 @@ export function DateStepper({
           });
   return (
     <View style={styles.numRow}>
-      <Pressable
+      <PressableScale
         onPress={() => {
           const prev = addDays(date, -1);
           if (prev >= minDate) onChange(prev);
@@ -375,15 +387,15 @@ export function DateStepper({
         hitSlop={6}
       >
         <Text style={[styles.numBtnText, { color: theme.text }]}>-</Text>
-      </Pressable>
+      </PressableScale>
       <Text style={[styles.body, styles.numValue, { color: theme.text }]}>{label}</Text>
-      <Pressable
+      <PressableScale
         onPress={() => onChange(addDays(date, 1))}
         style={[styles.numBtn, { borderColor: theme.border }]}
         hitSlop={6}
       >
         <Text style={[styles.numBtnText, { color: theme.text }]}>+</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -400,10 +412,10 @@ export function ColorTokenPicker({
   return (
     <View style={styles.chips}>
       {CATEGORY_TOKENS.map((t) => (
-        <Pressable
+        <PressableScale
           key={t}
           onPress={() => onSelect(t)}
-          style={[
+          innerStyle={[
             styles.swatch,
             {
               backgroundColor: categoryColor(t),
@@ -478,11 +490,13 @@ const styles = StyleSheet.create({
     gap: space(2),
   },
   submit: {
+    marginTop: space(1),
+  },
+  submitInner: {
     borderRadius: radius.md,
     minHeight: TAP,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: space(1),
   },
   submitText: { fontSize: 16, fontWeight: '600' },
 });

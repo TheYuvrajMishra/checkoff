@@ -6,7 +6,8 @@
  * download progress bar, retry on failure, and a "skip this version" option.
  * No emoji.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '../components/PressableScale';
 import { useUiStore } from '../state/ui';
 import { dark, light, space, TAP, type as type } from '../theme/tokens';
 import { updaterActions, useUpdaterStore } from './updaterStore';
@@ -35,19 +36,19 @@ export function UpdateBanner() {
 
         {phase.kind === 'available' && (
           <View style={styles.actions}>
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               onPress={updaterActions.startDownload}
               style={[styles.btn, styles.btnPrimary]}
             >
               <Text style={styles.btnPrimaryText}>Install</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
+            </PressableScale>
+            <PressableScale accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
               <Text style={styles.btnText}>Later</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={updaterActions.skip} style={styles.btn}>
+            </PressableScale>
+            <PressableScale accessibilityRole="button" onPress={updaterActions.skip} style={styles.btn}>
               <Text style={styles.btnText}>Skip this version</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         )}
 
@@ -62,29 +63,29 @@ export function UpdateBanner() {
               <Text style={styles.btnText}>
                 Downloading {Math.round(phase.progress * 100)}%
               </Text>
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 onPress={updaterActions.cancelDownload}
                 style={styles.btn}
               >
                 <Text style={styles.btnText}>Cancel</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           </View>
         )}
 
         {phase.kind === 'downloaded' && (
           <View style={styles.actions}>
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               onPress={updaterActions.retryInstall}
               style={[styles.btn, styles.btnPrimary]}
             >
               <Text style={styles.btnPrimaryText}>Install</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
+            </PressableScale>
+            <PressableScale accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
               <Text style={styles.btnText}>Later</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         )}
 
@@ -92,19 +93,19 @@ export function UpdateBanner() {
           <View>
             <Text style={styles.error}>{phase.error}</Text>
             <View style={styles.actions}>
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 onPress={updaterActions.startDownload}
                 style={[styles.btn, styles.btnPrimary]}
               >
                 <Text style={styles.btnPrimaryText}>Retry</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
+              </PressableScale>
+              <PressableScale accessibilityRole="button" onPress={updaterActions.later} style={styles.btn}>
                 <Text style={styles.btnText}>Later</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" onPress={updaterActions.skip} style={styles.btn}>
+              </PressableScale>
+              <PressableScale accessibilityRole="button" onPress={updaterActions.skip} style={styles.btn}>
                 <Text style={styles.btnText}>Skip this version</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           </View>
         )}

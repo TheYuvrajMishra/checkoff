@@ -10,7 +10,7 @@
  * a paused-then-killed session still reconciles honestly on next launch.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useDb } from '../db/useDb';
@@ -28,6 +28,7 @@ import {
 import { haptics } from '../haptics';
 import { useUiStore } from '../state/ui';
 import { dark, light, space, TAP, type as type } from '../theme/tokens';
+import { PressableScale } from '../components/PressableScale';
 
 const DURATIONS = [5, 15, 25, 30, 45, 60, 90];
 
@@ -272,7 +273,7 @@ export default function TimerScreen() {
           <Text style={styles.label}>Mode</Text>
           <View style={styles.segment}>
             {(['countdown', 'stopwatch'] as TimerMode[]).map((m) => (
-              <Pressable
+              <PressableScale
                 key={m}
                 accessibilityRole="button"
                 onPress={() => setMode(m)}
@@ -281,7 +282,7 @@ export default function TimerScreen() {
                 <Text style={[styles.segmentText, mode === m && styles.segmentTextActive]}>
                   {m === 'countdown' ? 'Countdown' : 'Stopwatch'}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
 
@@ -290,7 +291,7 @@ export default function TimerScreen() {
               <Text style={styles.label}>Duration</Text>
               <View style={styles.chipRow}>
                 {DURATIONS.map((d) => (
-                  <Pressable
+                  <PressableScale
                     key={d}
                     accessibilityRole="button"
                     onPress={() => setDurationMin(d)}
@@ -299,7 +300,7 @@ export default function TimerScreen() {
                     <Text style={[styles.chipText, durationMin === d && styles.chipTextActive]}>
                       {d}m
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
             </>
@@ -310,7 +311,7 @@ export default function TimerScreen() {
               <Text style={styles.label}>Attribute practice</Text>
               <View style={styles.chipRow}>
                 {skills.map((s) => (
-                  <Pressable
+                  <PressableScale
                     key={s.id}
                     accessibilityRole="button"
                     onPress={() => setSkillId(skillId === s.id ? null : s.id)}
@@ -319,20 +320,20 @@ export default function TimerScreen() {
                     <Text style={[styles.chipText, skillId === s.id && styles.chipTextActive]}>
                       {s.name}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
             </>
           )}
 
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             onPress={handleStart}
             disabled={!instance}
             style={[styles.primaryBtn, !instance && styles.btnDisabled]}
           >
             <Text style={styles.primaryBtnText}>Start</Text>
-          </Pressable>
+          </PressableScale>
         </>
       )}
 
@@ -352,17 +353,17 @@ export default function TimerScreen() {
           </Text>
           <View style={styles.btnRow}>
             {phase === 'running' ? (
-              <Pressable accessibilityRole="button" onPress={handlePause} style={styles.secondaryBtn}>
+              <PressableScale accessibilityRole="button" onPress={handlePause} style={styles.secondaryBtn}>
                 <Text style={styles.secondaryBtnText}>Pause</Text>
-              </Pressable>
+              </PressableScale>
             ) : (
-              <Pressable accessibilityRole="button" onPress={handleResume} style={styles.primaryBtnFlex}>
+              <PressableScale accessibilityRole="button" onPress={handleResume} style={styles.primaryBtnFlex}>
                 <Text style={styles.primaryBtnText}>Resume</Text>
-              </Pressable>
+              </PressableScale>
             )}
-            <Pressable accessibilityRole="button" onPress={() => handleStop(true)} style={styles.dangerBtn}>
+            <PressableScale accessibilityRole="button" onPress={() => handleStop(true)} style={styles.dangerBtn}>
               <Text style={styles.dangerBtnText}>Stop</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         </>
       )}
@@ -379,9 +380,9 @@ export default function TimerScreen() {
             focused
           </Text>
           {instance && instance.status !== 'done' && !markedDone && (
-            <Pressable accessibilityRole="button" onPress={handleMarkDone} style={styles.primaryBtn}>
+            <PressableScale accessibilityRole="button" onPress={handleMarkDone} style={styles.primaryBtn}>
               <Text style={styles.primaryBtnText}>Mark task done</Text>
-            </Pressable>
+            </PressableScale>
           )}
           {markedDone && <Text style={styles.success}>Task marked done.</Text>}
         </>

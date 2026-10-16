@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { ChartColumn } from 'lucide-react-native';
 import { useDb } from '../../db/useDb';
@@ -12,6 +12,7 @@ import { useUiStore } from '../../state/ui';
 import { categoryColor, dark, light, radius, space, type } from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
+import { Skeleton } from '../../components/Skeleton';
 import {
   categoryMeta,
   categoryMinutes,
@@ -315,7 +316,7 @@ export default function StatsScreen() {
         {data === null ? (
           <>
             {[0, 1, 2].map((i) => (
-              <View key={i} style={[styles.card, styles.skeleton, { backgroundColor: p.surface }]} />
+              <Skeleton key={i} height={140} />
             ))}
           </>
         ) : isEmpty ? (
@@ -350,11 +351,14 @@ export default function StatsScreen() {
                 </Text>
               ) : null}
               {MILESTONES.includes(data.currentStreak) && (
-                <View style={[styles.milestone, { borderColor: p.accent }]}>
+                <Animated.View
+                  entering={ZoomIn.springify().damping(12).stiffness(180)}
+                  style={[styles.milestone, { borderColor: p.accent }]}
+                >
                   <Text style={[styles.milestoneText, { color: p.accent }]}>
                     {data.currentStreak}-day streak — rituals held.
                   </Text>
-                </View>
+                </Animated.View>
               )}
             </Card>
 
@@ -684,7 +688,6 @@ const styles = StyleSheet.create({
     padding: space(2),
     marginBottom: space(2),
   },
-  skeleton: { height: 140, opacity: 0.5 },
   caption: {
     ...type.caption,
     textTransform: 'uppercase',

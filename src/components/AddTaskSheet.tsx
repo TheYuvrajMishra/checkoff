@@ -27,6 +27,7 @@ import { createInstance, type InstancePatch, type TaskInstanceEx } from '../db/r
 import { localDateString } from '../db/time';
 import { TaskForm, type TaskFormValues } from './TaskForm';
 import type { Category } from '../db/types';
+import { PressableScale } from './PressableScale';
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
@@ -218,7 +219,7 @@ export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, 
               <Text style={[styles.h2, { color: theme.text }]}>
                 {isEditing ? 'Edit task' : 'New task'}
               </Text>
-              <Pressable
+              <PressableScale
                 onPress={onClose}
                 style={[styles.closeBtn, { borderColor: theme.border }]}
                 hitSlop={8}
@@ -226,7 +227,7 @@ export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, 
                 accessibilityLabel="Close"
               >
                 <X color={theme.textDim} size={20} strokeWidth={2} />
-              </Pressable>
+              </PressableScale>
             </View>
           </View>
           <ScrollView

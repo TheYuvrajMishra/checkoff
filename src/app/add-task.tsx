@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import { createTemplate } from '../db/repos/templates';
 import { createInstance } from '../db/repos/instances';
 import { TaskForm, type TaskFormValues } from '../components/TaskForm';
 import type { Category } from '../db/types';
+import { PressableScale } from '../components/PressableScale';
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
@@ -85,13 +85,13 @@ export default function AddTask() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <Text style={[styles.h1, { color: theme.text }]}>New task</Text>
-          <Pressable
+          <PressableScale
             onPress={() => router.back()}
             style={[styles.closeBtn, { borderColor: theme.border }]}
             hitSlop={8}
           >
             <Text style={[styles.small, { color: theme.textDim }]}>Cancel</Text>
-          </Pressable>
+          </PressableScale>
         </View>
 
         <TaskForm

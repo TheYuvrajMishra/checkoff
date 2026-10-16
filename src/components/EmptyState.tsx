@@ -2,10 +2,11 @@
  * CheckOff — reusable empty state: centered message + primary action.
  * Lucide icon, no emoji.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useUiStore } from '../state/ui';
 import { dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
+import { PressableScale } from './PressableScale';
 
 interface Props {
   icon: LucideIcon;
@@ -24,17 +25,15 @@ export function EmptyState({ icon: Icon, title, subtitle, actionLabel, onAction 
       </View>
       <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
       <Text style={[styles.subtitle, { color: theme.textDim }]}>{subtitle}</Text>
-      <Pressable
+      <PressableScale
         onPress={onAction}
-        style={({ pressed }) => [
-          styles.btn,
-          { backgroundColor: theme.accent, transform: [{ scale: pressed ? 0.96 : 1 }] },
-        ]}
+        style={[styles.btn, { marginTop: space(1) }]}
+        innerStyle={[styles.btnInner, { backgroundColor: theme.accent }]}
         accessibilityRole="button"
         accessibilityLabel={actionLabel}
       >
         <Text style={[styles.btnText, { color: theme.onAccent }]}>{actionLabel}</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -59,6 +58,8 @@ const styles = StyleSheet.create({
   subtitle: { ...type.small, textAlign: 'center' },
   btn: {
     marginTop: space(1),
+  },
+  btnInner: {
     borderRadius: radius.md,
     minHeight: TAP,
     paddingHorizontal: space(3),

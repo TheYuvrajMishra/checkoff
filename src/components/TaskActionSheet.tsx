@@ -23,6 +23,7 @@ import { useUiStore } from '../state/ui';
 import { dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import type { TaskInstance } from '../db/types';
 import { localDateString } from '../db/time';
+import { PressableScale } from './PressableScale';
 
 interface Props {
   /** Null = hidden. */
@@ -159,7 +160,7 @@ export function TaskActionSheet({ instance, initialView = 'menu', onClose, onEdi
                   {instance.alarmTime ? ` · ${instance.alarmTime}` : ''}
                 </Text>
               </View>
-              <Pressable
+              <PressableScale
                 onPress={onClose}
                 style={[styles.closeBtn, { borderColor: theme.border }]}
                 hitSlop={8}
@@ -167,7 +168,7 @@ export function TaskActionSheet({ instance, initialView = 'menu', onClose, onEdi
                 accessibilityLabel="Close"
               >
                 <X color={theme.textDim} size={20} strokeWidth={2} />
-              </Pressable>
+              </PressableScale>
             </View>
           </View>
 
@@ -209,13 +210,13 @@ export function TaskActionSheet({ instance, initialView = 'menu', onClose, onEdi
               <Text style={[styles.small, { color: theme.textDim, paddingHorizontal: space(2) }]}>
                 Move “{instance.title}” to:
               </Text>
-              <Pressable
+              <PressableScale
                 onPress={() => setPickDate(true)}
                 style={[styles.dateBtn, { borderColor: theme.border, backgroundColor: theme.surface2 }]}
               >
                 <CalendarDays color={theme.accent} size={20} strokeWidth={2} />
                 <Text style={[styles.body, { color: theme.text }]}>Pick a date</Text>
-              </Pressable>
+              </PressableScale>
               {pickDate && (
                 <DateTimePicker
                   value={dateValue}
@@ -225,13 +226,13 @@ export function TaskActionSheet({ instance, initialView = 'menu', onClose, onEdi
                   onChange={(e, d) => void handleDatePicked(e, d)}
                 />
               )}
-              <Pressable
+              <PressableScale
                 onPress={() => setView('menu')}
                 style={styles.backRow}
                 hitSlop={8}
               >
                 <Text style={[styles.small, { color: theme.textFaint }]}>Back to menu</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           )}
         </Animated.View>
@@ -258,15 +259,22 @@ function MenuRow({
   active?: boolean;
 }) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       style={[
         styles.menuRow,
         {
-          backgroundColor: active ? theme.danger : 'transparent',
           borderColor: theme.border,
         },
       ]}
+      innerStyle={{
+        backgroundColor: active ? theme.danger : 'transparent',
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space(2),
+        borderRadius: radius.md,
+      }}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
@@ -291,7 +299,7 @@ function MenuRow({
           {hint}
         </Text>
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

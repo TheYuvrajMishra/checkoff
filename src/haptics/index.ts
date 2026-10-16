@@ -11,7 +11,9 @@
  * - Haptics.notificationAsync(NotificationFeedbackType.Success|Warning|Error)
  *
  * Design rules:
- * - check = a single Light tick (acknowledgement, not celebration).
+ * - check = a single Light tick (acknowledgement: press feedback, long-press,
+ *   swipe threshold, ritual step).
+ * - complete = Success notification (a task was finished — celebration).
  * - finalRitual = Light, then Success after 90ms (a two-beat "sealed" feel).
  * - uncheck = Soft (the gentlest reversal; taking something back is quiet).
  * - skip = Warning (distinct from success — a deliberate pass, not a win).
@@ -68,9 +70,14 @@ async function safe(fn: () => Promise<void>): Promise<void> {
 }
 
 export const haptics = {
-  /** Single light tick — a task was checked off. */
+  /** Single light tick — acknowledgement (press feedback, long-press, swipe threshold). */
   check(): Promise<void> {
     return safe(() => impact(Haptics.ImpactFeedbackStyle.Light));
+  },
+
+  /** Task completed — Success notification (Phase 4: completion celebrates). */
+  complete(): Promise<void> {
+    return safe(() => notify(Haptics.NotificationFeedbackType.Success));
   },
 
   /** Two-beat "sealed" pattern for the final-ritual completion. */

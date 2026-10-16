@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { PressableScale } from '../components/PressableScale';
 import { useTasksDb } from '../state/tasks';
 import { useUiStore } from '../state/ui';
 import { dark, light, categoryColor, type, radius, space, TAP, type ThemePalette } from '../theme/tokens';
@@ -153,11 +153,11 @@ function NavButtons({
   return (
     <View style={styles.navRow}>
       {onBack && (
-        <Pressable onPress={onBack} style={[styles.navBtn, styles.navSecondary, { borderColor: theme.border }]}>
+        <PressableScale onPress={onBack} style={[styles.navBtn, styles.navSecondary, { borderColor: theme.border }]}>
           <Text style={[styles.navSecondaryText, { color: theme.text }]}>Back</Text>
-        </Pressable>
+        </PressableScale>
       )}
-      <Pressable
+      <PressableScale
         onPress={onNext}
         disabled={nextDisabled}
         style={[
@@ -167,7 +167,7 @@ function NavButtons({
         ]}
       >
         <Text style={[styles.navPrimaryText, { color: theme.onAccent }]}>{nextLabel}</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -291,14 +291,14 @@ function CategoriesStep({
             <View style={styles.catHeader}>
               <View style={[styles.dot, { backgroundColor: categoryColor(c.colorToken) }]} />
               <Text style={[styles.h3, { color: theme.text, flex: 1 }]}>{c.name}</Text>
-              <Pressable
+              <PressableScale
                 onPress={() => setExpanded(isOpen ? null : c.id)}
                 style={[styles.miniBtn, { borderColor: theme.border }]}
               >
                 <Text style={[styles.small, { color: theme.textDim }]}>
                   {isOpen ? 'Hide' : `Skills (${skills.length})`}
                 </Text>
-              </Pressable>
+              </PressableScale>
             </View>
             <View style={styles.toggleRow}>
               <View>
@@ -327,12 +327,12 @@ function CategoriesStep({
                     placeholderTextColor={theme.textFaint}
                     style={[styles.input, styles.skillInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface2 }]}
                   />
-                  <Pressable
+                  <PressableScale
                     onPress={() => addSkill(c.id)}
                     style={[styles.miniBtn, { borderColor: theme.border }]}
                   >
                     <Text style={[styles.small, { color: theme.text }]}>Add</Text>
-                  </Pressable>
+                  </PressableScale>
                 </View>
               </View>
             )}
@@ -359,9 +359,9 @@ function CategoriesStep({
             thumbColor={theme.onAccent}
           />
         </View>
-        <Pressable onPress={add} style={[styles.addBtn, { backgroundColor: theme.accent }]}>
+        <PressableScale onPress={add} style={[styles.addBtn, { backgroundColor: theme.accent }]}>
           <Text style={[styles.body, { color: theme.onAccent, fontWeight: '600' }]}>Add category</Text>
-        </Pressable>
+        </PressableScale>
         {error && <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>}
       </View>
 

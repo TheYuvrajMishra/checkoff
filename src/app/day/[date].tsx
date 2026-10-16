@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useDb } from '../../db/useDb';
@@ -9,6 +9,8 @@ import { categoryColor, dark, light, radius, space, TAP, type } from '../../them
 import { categoryMeta, instancesInRange, sessionsInRange } from '../../stats/queries';
 import { formatEventTime, localDateString, localWeekdayIndex } from '../../db/time';
 import type { LogEvent, TaskInstance, TimerSession } from '../../db/types';
+import { Skeleton } from '../../components/Skeleton';
+import { PressableScale } from '../../components/PressableScale';
 
 const WEEKDAY_NAMES = [
   'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
@@ -81,12 +83,12 @@ export default function DayScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: p.bg }]}>
         <View style={styles.center}>
           <Text style={[styles.title, { color: p.text }]}>Invalid date</Text>
-          <Pressable
+          <PressableScale
             onPress={() => router.back()}
             style={[styles.backBtn, { borderColor: p.border }]}
           >
             <Text style={[styles.backLabel, { color: p.text }]}>Back</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </SafeAreaView>
     );
@@ -98,14 +100,14 @@ export default function DayScreen() {
     <SafeAreaView style={[styles.root, { backgroundColor: p.bg }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Pressable
+          <PressableScale
             accessibilityLabel="Back"
             onPress={() => router.back()}
             style={[styles.backBtn, { borderColor: p.border }]}
             hitSlop={8}
           >
             <Text style={[styles.backGlyph, { color: p.text }]}>‹</Text>
-          </Pressable>
+          </PressableScale>
           <View>
             <Text style={[styles.title, { color: p.text }]}>{date}</Text>
             <Text style={[styles.subtitle, { color: p.textFaint }]}>{weekday}</Text>
@@ -115,7 +117,7 @@ export default function DayScreen() {
         {data === null ? (
           <>
             {[0, 1, 2].map((i) => (
-              <View key={i} style={[styles.card, styles.skeleton, { backgroundColor: p.surface }]} />
+              <Skeleton key={i} height={96} />
             ))}
           </>
         ) : (
@@ -269,7 +271,6 @@ const styles = StyleSheet.create({
     padding: space(2),
     marginBottom: space(1),
   },
-  skeleton: { height: 96, opacity: 0.5 },
   calm: { ...type.body },
   taskTop: { flexDirection: 'row', alignItems: 'center', marginBottom: space(1) },
   statusChip: { ...type.caption, textTransform: 'uppercase', fontWeight: '700' },

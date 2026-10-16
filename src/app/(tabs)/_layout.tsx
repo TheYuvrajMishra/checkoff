@@ -5,7 +5,7 @@
  * - Lucide vector icons with labels underneath. No emoji.
  */
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, ChartColumn, ListChecks, Sun } from 'lucide-react-native';
 import { useUiStore } from '../../state/ui';
 import { dark, light, space, type, type ThemePalette } from '../../theme/tokens';
+import { PressableScale } from '../../components/PressableScale';
 
 const ICONS: Record<string, typeof Sun> = {
   index: Sun,
@@ -87,7 +88,7 @@ function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) {
             const Icon = ICONS[route.name] ?? Sun;
             const color = focused ? p.accent : p.textFaint;
             return (
-              <Pressable
+              <PressableScale
                 key={route.key}
                 accessibilityRole="button"
                 accessibilityState={{ selected: focused }}
@@ -107,7 +108,7 @@ function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) {
               >
                 <Icon color={color} size={22} strokeWidth={focused ? 2.4 : 2} />
                 <Text style={[styles.tabLabel, { color }]}>{label}</Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>

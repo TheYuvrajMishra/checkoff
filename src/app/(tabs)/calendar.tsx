@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { CalendarPlus } from 'lucide-react-native';
 import { useDb } from '../../db/useDb';
 import { useUiStore } from '../../state/ui';
 import { dark, light, radius, space, TAP, type } from '../../theme/tokens';
+import { PressableScale } from '../../components/PressableScale';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab } from '../../components/Fab';
@@ -90,25 +91,25 @@ export default function CalendarScreen() {
     <SafeAreaView style={[styles.root, { backgroundColor: p.bg }]}>
       {/* Month navigation */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           accessibilityLabel="Previous month"
           onPress={() => shiftMonth(-1)}
           style={[styles.navBtn, { borderColor: p.border }]}
           hitSlop={8}
         >
           <Text style={[styles.navGlyph, { color: p.text }]}>‹</Text>
-        </Pressable>
+        </PressableScale>
         <Text style={[styles.title, { color: p.text }]}>
           {MONTH_NAMES[viewMonth]} {viewYear}
         </Text>
-        <Pressable
+        <PressableScale
           accessibilityLabel="Next month"
           onPress={() => shiftMonth(1)}
           style={[styles.navBtn, { borderColor: p.border }]}
           hitSlop={8}
         >
           <Text style={[styles.navGlyph, { color: p.text }]}>›</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {/* Weekday header */}
@@ -135,7 +136,7 @@ export default function CalendarScreen() {
               const isFuture = date > today;
               const dayNum = Number(date.slice(8, 10));
               return (
-                <Pressable
+                <PressableScale
                   key={date}
                   accessibilityLabel={`${date}, ${done} of ${total} done`}
                   onPress={() => pick(date)}
@@ -163,7 +164,7 @@ export default function CalendarScreen() {
                       {done}/{total}
                     </Text>
                   )}
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>

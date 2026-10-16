@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,6 +23,8 @@ import { dark, light, shadow, type, radius, space, TAP, type ThemePalette } from
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab } from '../../components/Fab';
+import { PressableScale } from '../../components/PressableScale';
+import { Skeleton } from '../../components/Skeleton';
 import { TaskActionSheet } from '../../components/TaskActionSheet';
 import { TaskRow } from '../../components/TaskRow';
 import type { TaskInstanceEx } from '../../db/repos/instances';
@@ -106,6 +107,7 @@ export default function TodayScreen() {
   const graceMin = useUiStore((s) => s.graceMin);
   const date = useTasksStore((s) => s.date);
   const instances = useTasksStore((s) => s.instances);
+  const loading = useTasksStore((s) => s.loading);
   const refresh = useTasksStore((s) => s.refresh);
   const setDate = useTasksStore((s) => s.setDate);
   const toggleDone = useTasksStore((s) => s.toggleDone);
@@ -256,7 +258,8 @@ export default function TodayScreen() {
           if (remaining === 0) await haptics.finalRitual();
           else await haptics.check();
         } else {
-          await haptics.check();
+          // Phase 4: a finished task celebrates with a Success notification.
+          await haptics.complete();
         }
       } catch {
         /* haptics never throws by contract */
@@ -332,7 +335,7 @@ export default function TodayScreen() {
           {weekDays.map((d) => {
             const selected = d === date;
             return (
-              <Pressable
+              <PressableScale
                 key={d}
                 onPress={() => setDate(d)}
                 hitSlop={4}
@@ -357,7 +360,7 @@ export default function TodayScreen() {
                 >
                   {dayNum(d)}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -403,7 +406,13 @@ export default function TodayScreen() {
 
         {/* Tasks */}
         <Text style={[styles.caption, { color: theme.textFaint }]}>TASKS</Text>
-        {tasks.length === 0 && rituals.length === 0 ? (
+        {loading ? (
+          <>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={76} />
+            ))}
+          </>
+        ) : tasks.length === 0 && rituals.length === 0 ? (
           <EmptyState
             icon={CalendarPlus}
             title="No tasks yet"
@@ -444,15 +453,15 @@ export default function TodayScreen() {
                     {slot.overridden ? ' · overridden' : ''}
                   </Text>
                 </View>
-                <Pressable
+                <PressableScale
                   onPress={openOverridePicker}
                   style={[styles.slotBtn, { borderColor: theme.border }]}
                 >
                   <Text style={[styles.small, { color: theme.text }]}>Change</Text>
-                </Pressable>
+                </PressableScale>
               </View>
               {slot.skill && (
-                <Pressable
+                <PressableScale
                   onPress={() =>
                     router.push({
                       pathname: '/timer',
@@ -464,7 +473,7 @@ export default function TodayScreen() {
                   <Text style={[styles.startBtnText, { color: theme.onAccent }]}>
                     Start timer
                   </Text>
-                </Pressable>
+                </PressableScale>
               )}
             </View>
           </View>
@@ -474,17 +483,17 @@ export default function TodayScreen() {
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.caption, { color: theme.textFaint }]}>PICK A SKILL</Text>
             {overrideSkills.map((s) => (
-              <Pressable
+              <PressableScale
                 key={s.id}
                 onPress={() => applyOverride(s.id)}
                 style={styles.overrideRow}
               >
                 <Text style={[styles.body, { color: theme.text }]}>{s.name}</Text>
-              </Pressable>
+              </PressableScale>
             ))}
-            <Pressable onPress={() => setOverrideOpen(false)} style={styles.overrideRow}>
+            <PressableScale onPress={() => setOverrideOpen(false)} style={styles.overrideRow}>
               <Text style={[styles.body, { color: theme.textFaint }]}>Cancel</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         )}
       </ScrollView>
@@ -700,7 +709,7 @@ function NextUpCard({
           </View>
         </View>
         <View style={styles.nextCardActions}>
-          <Pressable
+          <PressableScale
             onPress={onStart}
             style={[styles.nextAction, { backgroundColor: theme.accent }]}
             accessibilityRole="button"
@@ -708,8 +717,8 @@ function NextUpCard({
           >
             <Play color={theme.onAccent} size={16} strokeWidth={2.5} />
             <Text style={[styles.nextActionText, { color: theme.onAccent }]}>Start</Text>
-          </Pressable>
-          <Pressable
+          </PressableScale>
+          <PressableScale
             onPress={onDone}
             style={[styles.nextAction, styles.nextActionOutline, { borderColor: theme.border }]}
             accessibilityRole="button"
@@ -717,7 +726,7 @@ function NextUpCard({
           >
             <Check color={theme.text} size={16} strokeWidth={2.5} />
             <Text style={[styles.nextActionText, { color: theme.text }]}>Done</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     </View>
@@ -756,7 +765,7 @@ function RitualRow({
   onToggle: () => void;
 }) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onToggle}
       style={[styles.ritualRow, { borderColor: theme.border }]}
     >
@@ -772,7 +781,7 @@ function RitualRow({
       >
         {item.title}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
