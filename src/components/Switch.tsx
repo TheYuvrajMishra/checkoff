@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Text, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
