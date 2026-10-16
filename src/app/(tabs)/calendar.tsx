@@ -2,9 +2,13 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
+import { CalendarPlus } from 'lucide-react-native';
 import { useDb } from '../../db/useDb';
 import { useUiStore } from '../../state/ui';
 import { dark, light, radius, space, TAP, type } from '../../theme/tokens';
+import { AddTaskSheet } from '../../components/AddTaskSheet';
+import { EmptyState } from '../../components/EmptyState';
+import { Fab } from '../../components/Fab';
 import { daySummary, monthSummary, type MonthSummary } from '../../stats/queries';
 import { addDays, localDateString } from '../../db/time';
 
@@ -41,6 +45,7 @@ export default function CalendarScreen() {
   const [selected, setSelected] = useState(today);
   const [summary, setSummary] = useState<MonthSummary>({});
   const [selectedInfo, setSelectedInfo] = useState<SelectedInfo | null>(null);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [m, s] = await Promise.all([
@@ -50,6 +55,10 @@ export default function CalendarScreen() {
     setSummary(m);
     setSelectedInfo(s);
   }, [db, viewYear, viewMonth, selected]);
+
+  const handleTaskAdded = useCallback(() => {
+    load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -164,11 +173,21 @@ export default function CalendarScreen() {
       {/* Selected-day summary */}
       <View style={[styles.summaryCard, { backgroundColor: p.surface, borderColor: p.border }]}>
         {selectedInfo ? (
-          <Text style={[styles.summaryText, { color: p.textDim }]}>
-            {selected} — {selectedInfo.done}/{selectedInfo.total} done
-            {selectedInfo.ritualsTotal > 0 &&
-              ` · rituals ${selectedInfo.ritualsDone}/${selectedInfo.ritualsTotal}`}
-          </Text>
+          selectedInfo.total === 0 ? (
+            <EmptyState
+              icon={CalendarPlus}
+              title="No tasks for this day"
+              subtitle={`${selected} is clear. Add your first task to plan it.`}
+              actionLabel="Add your first task"
+              onAction={() => setAddSheetOpen(true)}
+            />
+          ) : (
+            <Text style={[styles.summaryText, { color: p.textDim }]}>
+              {selected} — {selectedInfo.done}/{selectedInfo.total} done
+              {selectedInfo.ritualsTotal > 0 &&
+                ` · rituals ${selectedInfo.ritualsDone}/${selectedInfo.ritualsTotal}`}
+            </Text>
+          )
         ) : (
           <Text style={[styles.summaryText, { color: p.textFaint }]}>Loading…</Text>
         )}
@@ -178,6 +197,13 @@ export default function CalendarScreen() {
             : 'Tap any day to open its detail.'}
         </Text>
       </View>
+      <Fab onPress={() => setAddSheetOpen(true)} />
+      <AddTaskSheet
+        visible={addSheetOpen}
+        onClose={() => setAddSheetOpen(false)}
+        initialDate={selected}
+        onAdded={handleTaskAdded}
+      />
     </SafeAreaView>
   );
 }

@@ -1,14 +1,20 @@
 import { Tabs } from 'expo-router';
+import { CalendarDays, ChartColumn, ListChecks, Sun } from 'lucide-react-native';
+import type { ColorValue } from 'react-native';
 import { useUiStore } from '../../state/ui';
 import { dark, light, type } from '../../theme/tokens';
 
 /**
- * Bottom tab bar. Text labels only — no icons, no emoji.
+ * Bottom tab bar with Lucide vector icons (no emoji).
  * The Today tab (index) is sibling-owned; calendar/log/stats are Phase 4.
  */
 export default function TabsLayout() {
   const themeName = useUiStore((s) => s.theme);
   const p = themeName === 'light' ? light : dark;
+
+  const icon = (Icon: typeof Sun) => ({ color, size }: { color: ColorValue; size: number }) => (
+    <Icon color={color as string} size={size} strokeWidth={2} />
+  );
 
   return (
     <Tabs
@@ -29,10 +35,10 @@ export default function TabsLayout() {
       }}
     >
       {/* Sibling-owned. */}
-      <Tabs.Screen name="index" options={{ title: 'Today' }} />
-      <Tabs.Screen name="calendar" options={{ title: 'Calendar' }} />
-      <Tabs.Screen name="log" options={{ title: 'Log' }} />
-      <Tabs.Screen name="stats" options={{ title: 'Stats' }} />
+      <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: icon(Sun) }} />
+      <Tabs.Screen name="calendar" options={{ title: 'Calendar', tabBarIcon: icon(CalendarDays) }} />
+      <Tabs.Screen name="log" options={{ title: 'Log', tabBarIcon: icon(ListChecks) }} />
+      <Tabs.Screen name="stats" options={{ title: 'Stats', tabBarIcon: icon(ChartColumn) }} />
     </Tabs>
   );
 }

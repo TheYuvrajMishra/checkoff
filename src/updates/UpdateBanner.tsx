@@ -115,7 +115,16 @@ export function UpdateBanner() {
 
 function makeStyles(p: typeof dark) {
   return StyleSheet.create({
-    wrap: { paddingHorizontal: space(2), paddingTop: space(1) },
+    wrap: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 9999,
+      elevation: 9999,
+      paddingHorizontal: space(2),
+      paddingTop: space(1),
+    },
     card: {
       backgroundColor: p.surface,
       borderRadius: 12,

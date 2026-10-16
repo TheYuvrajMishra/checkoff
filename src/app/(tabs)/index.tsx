@@ -9,9 +9,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
+import { CalendarPlus } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../../state/tasks';
 import { useUiStore } from '../../state/ui';
 import { dark, light, categoryColor, type, radius, space, TAP, type ThemePalette } from '../../theme/tokens';
+import { AddTaskSheet } from '../../components/AddTaskSheet';
+import { EmptyState } from '../../components/EmptyState';
+import { Fab } from '../../components/Fab';
 import {
   addDays,
   localDateString,
@@ -78,6 +82,7 @@ export default function TodayScreen() {
   const [overrideSkills, setOverrideSkills] = useState<Skill[]>([]);
   const [catTokens, setCatTokens] = useState<Map<string, string>>(new Map());
   const [onTime, setOnTime] = useState<OnTimeStats>({ done: 0, planned: 0, onTimePct: null });
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   // Live clock.
   useEffect(() => {
@@ -85,21 +90,32 @@ export default function TodayScreen() {
     return () => clearInterval(t);
   }, []);
 
-  const syncDay = useCallback(async () => {
-    const today = localDateString();
-    try {
-      await markPastDueMissed(db, today);
-      await ensureInstancesForDate(db, date);
-      await refresh(date);
-      const s = await todaysSkillSlot(db, date);
-      setSlot(s);
-      setSlotLastTs(s.skill ? await lastPracticedAt(db, s.skill.id) : null);
-      const cats = await listCategories(db);
-      setCatTokens(new Map(cats.map((c) => [c.id, c.colorToken])));
-    } catch (e) {
-      console.error('[today] sync failed', e);
-    }
-  }, [db, date, refresh]);
+  const syncDay = useCallback(
+    async (target?: string) => {
+      const d = target ?? date;
+      const today = localDateString();
+      try {
+        await markPastDueMissed(db, today);
+        await ensureInstancesForDate(db, d);
+        await refresh(d);
+        const s = await todaysSkillSlot(db, d);
+        setSlot(s);
+        setSlotLastTs(s.skill ? await lastPracticedAt(db, s.skill.id) : null);
+        const cats = await listCategories(db);
+        setCatTokens(new Map(cats.map((c) => [c.id, c.colorToken])));
+      } catch (e) {
+        console.error('[today] sync failed', e);
+      }
+    },
+    [db, date, refresh]
+  );
+
+  const handleTaskAdded = useCallback(
+    (d: string) => {
+      void syncDay(d);
+    },
+    [syncDay]
+  );
 
   // Recompute on-time stats from the store's instances.
   useFocusEffect(
@@ -301,22 +317,27 @@ export default function TodayScreen() {
 
         {/* Tasks */}
         <Text style={[styles.caption, { color: theme.textFaint }]}>TASKS</Text>
-        {tasks.length === 0 && (
-          <Text style={[styles.small, { color: theme.textFaint }]}>
-            Nothing scheduled for this day.
-          </Text>
-        )}
-        {tasks.map((t) => (
-          <TaskRow
-            key={t.id}
-            item={t}
-            theme={theme}
-            categoryToken={t.categoryId ? catTokens.get(t.categoryId) : undefined}
-            isNext={nextUp?.id === t.id}
-            onToggle={() => handleToggle(t)}
-            onSkip={() => handleSkip(t.id)}
+        {tasks.length === 0 && rituals.length === 0 ? (
+          <EmptyState
+            icon={CalendarPlus}
+            title="No tasks yet"
+            subtitle="Nothing scheduled for this day. Add your first task to get started."
+            actionLabel="Add your first task"
+            onAction={() => setAddSheetOpen(true)}
           />
-        ))}
+        ) : (
+          tasks.map((t) => (
+            <TaskRow
+              key={t.id}
+              item={t}
+              theme={theme}
+              categoryToken={t.categoryId ? catTokens.get(t.categoryId) : undefined}
+              isNext={nextUp?.id === t.id}
+              onToggle={() => handleToggle(t)}
+              onSkip={() => handleSkip(t.id)}
+            />
+          ))
+        )}
 
         {/* Skill slot */}
         {slot && (slot.skill || slot.category) && (
@@ -378,6 +399,13 @@ export default function TodayScreen() {
           </View>
         )}
       </ScrollView>
+      <Fab onPress={() => setAddSheetOpen(true)} />
+      <AddTaskSheet
+        visible={addSheetOpen}
+        onClose={() => setAddSheetOpen(false)}
+        initialDate={date}
+        onAdded={handleTaskAdded}
+      />
     </SafeAreaView>
   );
 }

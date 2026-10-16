@@ -4,11 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import { ChartColumn } from 'lucide-react-native';
 import { useDb } from '../../db/useDb';
 import { logEvent } from '../../db/log';
 import { getMeta, setMeta } from '../../db/repos/meta';
 import { useUiStore } from '../../state/ui';
 import { categoryColor, dark, light, radius, space, type } from '../../theme/tokens';
+import { AddTaskSheet } from '../../components/AddTaskSheet';
+import { EmptyState } from '../../components/EmptyState';
 import {
   categoryMeta,
   categoryMinutes,
@@ -81,6 +84,7 @@ export default function StatsScreen() {
   const { width } = useWindowDimensions();
 
   const [data, setData] = useState<StatsData | null>(null);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const load = useCallback(async () => {
     const today = localDateString();
@@ -291,6 +295,19 @@ export default function StatsScreen() {
 
   const cardW = width - space(2) * 2 - space(2) * 2; // screen padding + card padding
 
+  const handleTaskAdded = useCallback(() => {
+    setData(null);
+    load();
+  }, [load]);
+
+  // No meaningful data yet: no tasks in 30d, no timed work, no streak ever.
+  const isEmpty =
+    data !== null &&
+    data.rate30Label === '0/0' &&
+    data.categories.length === 0 &&
+    data.skills.length === 0 &&
+    data.longestStreak === 0;
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: p.bg }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -301,6 +318,14 @@ export default function StatsScreen() {
               <View key={i} style={[styles.card, styles.skeleton, { backgroundColor: p.surface }]} />
             ))}
           </>
+        ) : isEmpty ? (
+          <EmptyState
+            icon={ChartColumn}
+            title="No stats yet"
+            subtitle="Complete tasks and timers and your trends will appear here."
+            actionLabel="Add your first task"
+            onAction={() => setAddSheetOpen(true)}
+          />
         ) : (
           <>
             <Card index={0} p={p}>
@@ -450,6 +475,11 @@ export default function StatsScreen() {
           </>
         )}
       </ScrollView>
+      <AddTaskSheet
+        visible={addSheetOpen}
+        onClose={() => setAddSheetOpen(false)}
+        onAdded={handleTaskAdded}
+      />
     </SafeAreaView>
   );
 }
