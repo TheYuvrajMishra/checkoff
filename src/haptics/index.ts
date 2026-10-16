@@ -49,11 +49,16 @@ function sleep(ms: number): Promise<void> {
 
 async function impact(style: Haptics.ImpactFeedbackStyle): Promise<void> {
   if (!config.enabled) return;
-  const downgraded =
-    config.intensity === 'light' && style === Haptics.ImpactFeedbackStyle.Heavy
-      ? Haptics.ImpactFeedbackStyle.Medium
-      : style;
-  await Haptics.impactAsync(downgraded);
+  let mapped = style;
+  if (config.intensity === 'light') {
+    if (style === Haptics.ImpactFeedbackStyle.Heavy) mapped = Haptics.ImpactFeedbackStyle.Medium;
+    else if (style === Haptics.ImpactFeedbackStyle.Medium) mapped = Haptics.ImpactFeedbackStyle.Light;
+    else if (style === Haptics.ImpactFeedbackStyle.Light) mapped = Haptics.ImpactFeedbackStyle.Soft;
+  } else if (config.intensity === 'strong') {
+    if (style === Haptics.ImpactFeedbackStyle.Soft) mapped = Haptics.ImpactFeedbackStyle.Light;
+    else if (style === Haptics.ImpactFeedbackStyle.Light) mapped = Haptics.ImpactFeedbackStyle.Medium;
+  }
+  await Haptics.impactAsync(mapped);
 }
 
 async function notify(type: Haptics.NotificationFeedbackType): Promise<void> {
@@ -70,12 +75,20 @@ async function safe(fn: () => Promise<void>): Promise<void> {
 }
 
 export const haptics = {
-  /** Single light tick — acknowledgement (press feedback, long-press, swipe threshold). */
+  /** Crisp selection detent tick — used at every slider detent step. */
+  selection(): Promise<void> {
+    return safe(async () => {
+      if (!config.enabled) return;
+      await Haptics.selectionAsync();
+    });
+  },
+
+  /** Single light tick — acknowledgement (press feedback, long-press, swipe threshold, slider release). */
   check(): Promise<void> {
     return safe(() => impact(Haptics.ImpactFeedbackStyle.Light));
   },
 
-  /** Task completed — Success notification (Phase 4: completion celebrates). */
+  /** Task completed — Success notification. */
   complete(): Promise<void> {
     return safe(() => notify(Haptics.NotificationFeedbackType.Success));
   },

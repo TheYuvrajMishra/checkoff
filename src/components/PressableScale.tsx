@@ -22,6 +22,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { haptics } from '../haptics';
+import { HIT_SLOP } from '../theme/tokens';
 
 interface Props {
   onPress?: (e: GestureResponderEvent) => void;
@@ -30,19 +31,26 @@ interface Props {
   disabled?: boolean;
   /** Fire the light haptic tick on press. Default true. */
   tick?: boolean;
-  /** Pressed scale. Default 0.96. */
+  /** Pressed scale. Default 0.97. */
   scaleTo?: number;
   /** Layout style — applied to the animated wrapper. */
   style?: StyleProp<ViewStyle>;
   /** Visual style — applied to the inner Pressable. */
   innerStyle?: StyleProp<ViewStyle>;
   hitSlop?: number | { top: number; bottom: number; left: number; right: number };
-  accessibilityRole?: 'button' | 'checkbox' | 'link' | 'none';
+  accessibilityRole?: 'button' | 'checkbox' | 'link' | 'switch' | 'tab' | 'none';
   accessibilityLabel?: string;
   accessibilityState?: { checked?: boolean; disabled?: boolean; selected?: boolean };
   children?: React.ReactNode;
   testID?: string;
 }
+
+const SPRING_CONFIG = {
+  damping: 26,
+  stiffness: 520,
+  mass: 0.6,
+  overshootClamping: true,
+} as const;
 
 export function PressableScale({
   onPress,
@@ -50,11 +58,11 @@ export function PressableScale({
   delayLongPress,
   disabled,
   tick = true,
-  scaleTo = 0.96,
+  scaleTo = 0.97,
   style,
   innerStyle,
-  hitSlop,
-  accessibilityRole,
+  hitSlop = HIT_SLOP,
+  accessibilityRole = 'button',
   accessibilityLabel,
   accessibilityState,
   children,
@@ -67,14 +75,13 @@ export function PressableScale({
   }));
 
   const pressIn = () => {
-    // Reanimated shared values are mutated by design; the React Compiler
-    // lint rule does not model them.
+    if (disabled) return;
     // eslint-disable-next-line react-hooks/immutability
-    scale.value = withSpring(scaleTo, { damping: 15, stiffness: 400 });
+    scale.value = withSpring(scaleTo, SPRING_CONFIG);
   };
   const pressOut = () => {
     // eslint-disable-next-line react-hooks/immutability
-    scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+    scale.value = withSpring(1, SPRING_CONFIG);
   };
 
   const handlePress = useCallback(
