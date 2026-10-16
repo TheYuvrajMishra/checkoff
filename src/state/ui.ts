@@ -33,6 +33,14 @@ interface UiState {
   alarmSound: AlarmSoundId;
   hydrated: boolean;
   set: (p: Partial<UiState>) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  setHapticsEnabled: (enabled: boolean) => void;
+  setHapticIntensity: (intensity: HapticIntensity | 'heavy') => void;
+  setClockFormat: (format: ClockFormat) => void;
+  setWeekStart: (start: WeekStart) => void;
+  setGraceMin: (min: number) => void;
+  setSnoozeMin: (min: number) => void;
+  setAlarmSound: (sound: AlarmSoundId) => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -54,5 +62,28 @@ export const useUiStore = create<UiState>()((set) => ({
       }
       return next;
     }),
+  setThemeMode: (themeMode) =>
+    set((prev) => ({
+      ...prev,
+      themeMode,
+      theme: resolveThemeName(themeMode),
+    })),
+  setHapticsEnabled: (hapticsEnabled) =>
+    set((prev) => ({ ...prev, hapticsEnabled })),
+  setHapticIntensity: (intensity) =>
+    set((prev) => ({
+      ...prev,
+      hapticIntensity: intensity === 'heavy' ? 'strong' : (intensity as HapticIntensity),
+    })),
+  setClockFormat: (clockFormat) =>
+    set((prev) => ({ ...prev, clockFormat })),
+  setWeekStart: (weekStart) =>
+    set((prev) => ({ ...prev, weekStart })),
+  setGraceMin: (graceMin) =>
+    set((prev) => ({ ...prev, graceMin })),
+  setSnoozeMin: (snoozeMin) =>
+    set((prev) => ({ ...prev, snoozeMin })),
+  setAlarmSound: (alarmSound) =>
+    set((prev) => ({ ...prev, alarmSound })),
 }));
 

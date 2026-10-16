@@ -17,6 +17,7 @@ import {
   type ThemeMode,
   type WeekStart,
 } from '../state/ui';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { dark, light } from '../theme/tokens';
 import { localDateString } from '../db/time';
 import { setDb } from '../state/tasks';
@@ -207,32 +208,34 @@ export default function RootLayout() {
   const palette = themeName === 'light' ? light : dark;
 
   return (
-    <SQLiteProvider databaseName="checkoff.db" onInit={migrateDb}>
-      <StatusBar style={themeName === 'light' ? 'dark' : 'light'} />
-      <Bootstrap>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: palette.bg },
-            animation: 'fade',
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="settings" />
-          <Stack.Screen name="add-task" options={{ presentation: 'modal' }} />
-          <Stack.Screen
-            name="alarm"
-            options={{
-              presentation: 'fullScreenModal',
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SQLiteProvider databaseName="checkoff.db" onInit={migrateDb}>
+        <StatusBar style={themeName === 'light' ? 'dark' : 'light'} />
+        <Bootstrap>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: palette.bg },
               animation: 'fade',
-              gestureEnabled: false,
             }}
-          />
-          <Stack.Screen name="timer" />
-          <Stack.Screen name="day/[date]" />
-        </Stack>
-      </Bootstrap>
-    </SQLiteProvider>
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="add-task" options={{ presentation: 'modal' }} />
+            <Stack.Screen
+              name="alarm"
+              options={{
+                presentation: 'fullScreenModal',
+                animation: 'fade',
+                gestureEnabled: false,
+              }}
+            />
+            <Stack.Screen name="timer" />
+            <Stack.Screen name="day/[date]" />
+          </Stack>
+        </Bootstrap>
+      </SQLiteProvider>
+    </GestureHandlerRootView>
   );
 }
