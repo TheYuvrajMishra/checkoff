@@ -56,11 +56,10 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.stepLabel, { color: theme.textFaint }]}>
-          STEP {step + 1} OF {STEPS.length} · {STEPS[step].toUpperCase()}
-        </Text>
-
+      <View style={styles.progressWrap}>
+        <ProgressBar theme={theme} step={step} total={STEPS.length} />
+      </View>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {step === 0 && <WelcomeStep theme={theme} onNext={next} />}
         {step === 1 && (
           <CategoriesStep
@@ -99,6 +98,45 @@ export default function Onboarding() {
   );
 }
 
+/** Visual step progress: bar + labels. */
+function ProgressBar({ theme, step, total }: { theme: ThemePalette; step: number; total: number }) {
+  return (
+    <View style={styles.progressInner}>
+      <View style={[styles.progressTrack, { backgroundColor: theme.border }]}>
+        <View
+          style={[
+            styles.progressFill,
+            { backgroundColor: theme.accent, width: `${((step + 1) / total) * 100}%` },
+          ]}
+        />
+      </View>
+      <Text style={[styles.progressLabel, { color: theme.textFaint }]}>
+        {step + 1} of {total}
+      </Text>
+    </View>
+  );
+}
+
+function StepHeader({
+  theme,
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  theme: ThemePalette;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <View style={styles.stepHeader}>
+      <Text style={[styles.eyebrow, { color: theme.accent }]}>{eyebrow}</Text>
+      <Text style={[styles.h1, { color: theme.text }]}>{title}</Text>
+      <Text style={[styles.body, { color: theme.textDim }]}>{subtitle}</Text>
+    </View>
+  );
+}
+
 function NavButtons({
   theme,
   onBack,
@@ -115,8 +153,8 @@ function NavButtons({
   return (
     <View style={styles.navRow}>
       {onBack && (
-        <Pressable onPress={onBack} style={[styles.navBtn, { borderColor: theme.border }]}>
-          <Text style={[styles.body, { color: theme.text }]}>Back</Text>
+        <Pressable onPress={onBack} style={[styles.navBtn, styles.navSecondary, { borderColor: theme.border }]}>
+          <Text style={[styles.navSecondaryText, { color: theme.text }]}>Back</Text>
         </Pressable>
       )}
       <Pressable
@@ -125,7 +163,7 @@ function NavButtons({
         style={[
           styles.navBtn,
           styles.navPrimary,
-          { backgroundColor: theme.accent, opacity: nextDisabled ? 0.4 : 1 },
+          { backgroundColor: theme.accent, opacity: nextDisabled ? 0.45 : 1 },
         ]}
       >
         <Text style={[styles.navPrimaryText, { color: theme.onAccent }]}>{nextLabel}</Text>
@@ -135,19 +173,43 @@ function NavButtons({
 }
 
 function WelcomeStep({ theme, onNext }: { theme: ThemePalette; onNext: () => void }) {
+  const features = [
+    { title: 'Rituals & tasks', desc: 'Define daily anchors and one-off work. Alarms keep you honest.' },
+    { title: 'Streaks & analytics', desc: 'Completion rates, heatmaps, and weekly reviews show the trend.' },
+    { title: 'Skill rotation', desc: 'Mark categories as rotation pools — CheckOff surfaces what needs practice.' },
+    { title: 'Private by design', desc: 'No account, no cloud. Everything stays on this device.' },
+  ];
   return (
     <View style={styles.stepBody}>
-      <Text style={[styles.display, { color: theme.text }]}>CheckOff</Text>
-      <Text style={[styles.body, { color: theme.textDim }]}>
-        A discipline instrument. You define your rituals, tasks, and the skills
-        you are building. CheckOff keeps the score, tracks your streaks, and
-        rotates what you practice — no accounts, no cloud, everything stays on
-        this device.
-      </Text>
-      <Text style={[styles.body, { color: theme.textDim }]}>
-        Three minutes of setup: your categories, your tasks, and you are
-        running. Nothing here is shared or uploaded.
-      </Text>
+      <View style={styles.hero}>
+        <View style={[styles.logoMark, { backgroundColor: theme.accent }]}>
+          <Text style={[styles.logoCheck, { color: theme.onAccent }]}>✓</Text>
+        </View>
+        <Text style={[styles.display, { color: theme.text }]}>CheckOff</Text>
+        <Text style={[styles.tagline, { color: theme.textDim }]}>
+          The discipline instrument for people who keep their own score.
+        </Text>
+      </View>
+
+      <View style={styles.featureList}>
+        {features.map((f) => (
+          <View key={f.title} style={styles.featureRow}>
+            <View style={[styles.featureDot, { backgroundColor: theme.accent }]} />
+            <View style={styles.featureText}>
+              <Text style={[styles.h3, { color: theme.text }]}>{f.title}</Text>
+              <Text style={[styles.small, { color: theme.textDim }]}>{f.desc}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={[styles.noteCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.small, { color: theme.textDim }]}>
+          Setup takes about three minutes: your categories, your tasks, then
+          you are running. Nothing is uploaded or shared.
+        </Text>
+      </View>
+
       <NavButtons theme={theme} onNext={onNext} nextLabel="Begin setup" />
     </View>
   );
@@ -206,11 +268,20 @@ function CategoriesStep({
 
   return (
     <View style={styles.stepBody}>
-      <Text style={[styles.h1, { color: theme.text }]}>Your arenas</Text>
-      <Text style={[styles.body, { color: theme.textDim }]}>
-        Categories group your work. Mark a category as a rotation pool and
-        CheckOff will surface its least-practiced skill every day.
-      </Text>
+      <StepHeader
+        theme={theme}
+        eyebrow="Step 2 · Categories"
+        title="Your arenas"
+        subtitle="Categories group your work. Mark one as a rotation pool and CheckOff will surface its least-practiced skill each day."
+      />
+
+      {categories.length === 0 && (
+        <View style={[styles.emptyCard, { borderColor: theme.border }]}>
+          <Text style={[styles.body, { color: theme.textDim, textAlign: 'center' }]}>
+            No categories yet. Add your first one below — e.g. Fitness, Deep work, Languages.
+          </Text>
+        </View>
+      )}
 
       {categories.map((c) => {
         const skills = skillsByCat[c.id] ?? [];
@@ -230,7 +301,10 @@ function CategoriesStep({
               </Pressable>
             </View>
             <View style={styles.toggleRow}>
-              <Text style={[styles.small, { color: theme.textDim }]}>Skill rotation pool</Text>
+              <View>
+                <Text style={[styles.small, { color: theme.text }]}>Skill rotation pool</Text>
+                <Text style={[styles.caption, { color: theme.textFaint }]}>Surface least-practiced daily</Text>
+              </View>
               <Switch
                 value={c.rotationEnabled}
                 onValueChange={() => toggleRotation(c)}
@@ -241,9 +315,9 @@ function CategoriesStep({
             {isOpen && (
               <View style={styles.skillsBox}>
                 {skills.map((s) => (
-                  <Text key={s.id} style={[styles.small, { color: theme.text }]}>
-                    · {s.name}
-                  </Text>
+                  <View key={s.id} style={[styles.skillChip, { backgroundColor: theme.surface2 }]}>
+                    <Text style={[styles.small, { color: theme.text }]}>{s.name}</Text>
+                  </View>
                 ))}
                 <View style={styles.skillAddRow}>
                   <TextInput
@@ -266,28 +340,30 @@ function CategoriesStep({
         );
       })}
 
-      <Text style={[styles.caption, { color: theme.textFaint }]}>ADD CATEGORY</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="e.g. Fitness, Deep work, Languages"
-        placeholderTextColor={theme.textFaint}
-        style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface2 }]}
-      />
-      <ColorTokenPicker theme={theme} selected={token} onSelect={setToken} />
-      <View style={styles.toggleRow}>
-        <Text style={[styles.small, { color: theme.textDim }]}>Include in skill rotation</Text>
-        <Switch
-          value={rotation}
-          onValueChange={setRotation}
-          trackColor={{ true: theme.accent, false: theme.border }}
-          thumbColor={theme.onAccent}
+      <View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.eyebrow, { color: theme.textFaint }]}>New category</Text>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. Fitness, Deep work, Languages"
+          placeholderTextColor={theme.textFaint}
+          style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface2 }]}
         />
+        <ColorTokenPicker theme={theme} selected={token} onSelect={setToken} />
+        <View style={styles.toggleRow}>
+          <Text style={[styles.small, { color: theme.textDim }]}>Include in skill rotation</Text>
+          <Switch
+            value={rotation}
+            onValueChange={setRotation}
+            trackColor={{ true: theme.accent, false: theme.border }}
+            thumbColor={theme.onAccent}
+          />
+        </View>
+        <Pressable onPress={add} style={[styles.addBtn, { backgroundColor: theme.accent }]}>
+          <Text style={[styles.body, { color: theme.onAccent, fontWeight: '600' }]}>Add category</Text>
+        </Pressable>
+        {error && <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>}
       </View>
-      <Pressable onPress={add} style={[styles.addBtn, { borderColor: theme.border }]}>
-        <Text style={[styles.body, { color: theme.text }]}>Add category</Text>
-      </Pressable>
-      {error && <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>}
 
       <NavButtons
         theme={theme}
@@ -342,32 +418,50 @@ function TasksStep({
 
   return (
     <View style={styles.stepBody}>
-      <Text style={[styles.h1, { color: theme.text }]}>Your commitments</Text>
-      <Text style={[styles.body, { color: theme.textDim }]}>
-        Add at least one recurring task or one-off. Rituals are your
-        non-negotiable daily anchors.
-      </Text>
+      <StepHeader
+        theme={theme}
+        eyebrow="Step 3 · Tasks"
+        title="Your commitments"
+        subtitle="Add at least one recurring task or one-off. Rituals are your non-negotiable daily anchors."
+      />
+
+      {templates.length === 0 && (
+        <View style={[styles.emptyCard, { borderColor: theme.border }]}>
+          <Text style={[styles.body, { color: theme.textDim, textAlign: 'center' }]}>
+            No tasks yet. Add your first commitment below.
+          </Text>
+        </View>
+      )}
 
       {templates.map((t) => (
         <View key={t.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.body, { color: theme.text }]}>{t.title}</Text>
+          <View style={styles.taskHeader}>
+            <Text style={[styles.body, { color: theme.text, fontWeight: '600', flex: 1 }]}>{t.title}</Text>
+            {t.isRitual && (
+              <View style={[styles.ritualBadge, { backgroundColor: theme.accentDim }]}>
+                <Text style={[styles.caption, { color: theme.accent }]}>Ritual</Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.small, { color: theme.textDim }]}>
             {t.recurrence}
             {t.alarmTime ? ` · ${t.alarmTime}` : ''}
-            {t.isRitual ? ' · ritual' : ''} · {t.durationMin} min
+            {` · ${t.durationMin} min`}
           </Text>
         </View>
       ))}
 
-      <Text style={[styles.caption, { color: theme.textFaint }]}>ADD TASK</Text>
-      <TaskForm
-        key={formKey}
-        categories={categories}
-        showInstanceDate={false}
-        submitLabel="Add task"
-        onSubmit={submit}
-      />
-      {error && <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>}
+      <View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.eyebrow, { color: theme.textFaint }]}>New task</Text>
+        <TaskForm
+          key={formKey}
+          categories={categories}
+          showInstanceDate={false}
+          submitLabel="Add task"
+          onSubmit={submit}
+        />
+        {error && <Text style={[styles.small, { color: theme.danger }]}>{error}</Text>}
+      </View>
 
       <NavButtons
         theme={theme}
@@ -403,14 +497,39 @@ function DoneStep({
   const rituals = templates.filter((t) => t.isRitual).length;
   return (
     <View style={styles.stepBody}>
-      <Text style={[styles.h1, { color: theme.text }]}>Ready</Text>
-      <Text style={[styles.body, { color: theme.textDim }]}>
-        {categories.length} {categories.length === 1 ? 'category' : 'categories'} ·{' '}
-        {templates.length} {templates.length === 1 ? 'task' : 'tasks'}
-        {rituals > 0 ? ` (${rituals} ${rituals === 1 ? 'ritual' : 'rituals'})` : ''}.
-        Your day starts tomorrow at your first alarm — or right now, if you
-        add something for today.
+      <View style={styles.hero}>
+        <View style={[styles.logoMark, { backgroundColor: theme.accent }]}>
+          <Text style={[styles.logoCheck, { color: theme.onAccent }]}>✓</Text>
+        </View>
+        <Text style={[styles.h1, { color: theme.text, textAlign: 'center' }]}>You are set up</Text>
+        <Text style={[styles.body, { color: theme.textDim, textAlign: 'center' }]}>
+          Your system is live. Show up, check off, repeat.
+        </Text>
+      </View>
+
+      <View style={[styles.summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCell}>
+            <Text style={[styles.h1, { color: theme.text }]}>{categories.length}</Text>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>CATEGORIES</Text>
+          </View>
+          <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+          <View style={styles.summaryCell}>
+            <Text style={[styles.h1, { color: theme.text }]}>{templates.length}</Text>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>TASKS</Text>
+          </View>
+          <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+          <View style={styles.summaryCell}>
+            <Text style={[styles.h1, { color: theme.text }]}>{rituals}</Text>
+            <Text style={[styles.caption, { color: theme.textFaint }]}>RITUALS</Text>
+          </View>
+        </View>
+      </View>
+
+      <Text style={[styles.small, { color: theme.textDim, textAlign: 'center' }]}>
+        Your day starts at your first alarm — or right now, from the Today tab.
       </Text>
+
       <NavButtons theme={theme} onBack={onBack} onNext={onFinish} nextLabel="Start" />
     </View>
   );
@@ -418,23 +537,64 @@ function DoneStep({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { padding: space(2), gap: space(2), paddingBottom: space(6) },
-  stepLabel: { ...type.caption, textTransform: 'uppercase' },
-  stepBody: { gap: space(2) },
+  progressWrap: { paddingHorizontal: space(3), paddingTop: space(2), paddingBottom: space(1) },
+  progressInner: { gap: space(1) },
+  progressTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2 },
+  progressLabel: { ...type.caption, textAlign: 'right' },
+  scroll: { padding: space(3), gap: space(3), paddingBottom: space(8) },
+  stepBody: { gap: space(3) },
+  stepHeader: { gap: space(1) },
+  eyebrow: { ...type.caption, textTransform: 'uppercase', letterSpacing: 1.2 },
   display: { ...type.display },
   h1: { ...type.h1 },
   h3: { ...type.h3 },
   body: { ...type.body },
   small: { ...type.small },
-  caption: { ...type.caption, textTransform: 'uppercase' },
+  caption: { ...type.caption },
+  tagline: { ...type.body, marginTop: space(1) },
+
+  hero: { alignItems: 'center', gap: space(1.5), paddingVertical: space(2) },
+  logoMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space(1),
+  },
+  logoCheck: { fontSize: 36, fontWeight: '700' },
+
+  featureList: { gap: space(2.5) },
+  featureRow: { flexDirection: 'row', gap: space(2), alignItems: 'flex-start' },
+  featureDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
+  featureText: { flex: 1, gap: space(0.5) },
+
+  noteCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space(2),
+  },
+  emptyCard: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: radius.lg,
+    padding: space(3),
+  },
   card: {
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: space(2),
     gap: space(1.5),
   },
+  formCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space(2),
+    gap: space(2),
+  },
   catHeader: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
   miniBtn: {
     borderWidth: 1,
     borderRadius: radius.sm,
@@ -450,6 +610,12 @@ const styles = StyleSheet.create({
     gap: space(2),
   },
   skillsBox: { gap: space(1), paddingTop: space(1) },
+  skillChip: {
+    borderRadius: radius.sm,
+    paddingHorizontal: space(1.5),
+    paddingVertical: space(0.75),
+    alignSelf: 'flex-start',
+  },
   skillAddRow: { flexDirection: 'row', gap: space(1), alignItems: 'center' },
   skillInput: { flex: 1 },
   input: {
@@ -460,22 +626,37 @@ const styles = StyleSheet.create({
     minHeight: TAP,
   },
   addBtn: {
-    borderWidth: 1,
     borderRadius: radius.md,
     minHeight: TAP,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  taskHeader: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
+  ritualBadge: {
+    borderRadius: radius.sm,
+    paddingHorizontal: space(1),
+    paddingVertical: space(0.5),
+  },
+
+  summaryCard: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space(2),
+  },
+  summaryRow: { flexDirection: 'row', alignItems: 'center' },
+  summaryCell: { flex: 1, alignItems: 'center', gap: space(0.5) },
+  summaryDivider: { width: 1, height: 40 },
+
   navRow: { flexDirection: 'row', gap: space(1.5), marginTop: space(1) },
   navBtn: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: 'transparent',
     borderRadius: radius.md,
-    minHeight: TAP,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  navSecondary: { borderWidth: 1 },
+  navSecondaryText: { fontSize: 16, fontWeight: '600' },
   navPrimary: { borderWidth: 0 },
-  navPrimaryText: { fontSize: 16, fontWeight: '600' },
+  navPrimaryText: { fontSize: 16, fontWeight: '700' },
 });
