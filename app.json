@@ -2,10 +2,8 @@
   "expo": {
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B0D10",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
       },
       "package": "com.yuvrajmishra.checkoff",
       "permissions": [
@@ -74,6 +72,11 @@
         "projectId": "e1c4a8d5-ff3f-45fc-95d6-5105724e7b1d"
       }
     },
-    "owner": "aurio11s-team"
+    "owner": "aurio11s-team",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    }
   }
 }
