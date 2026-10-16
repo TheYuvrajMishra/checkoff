@@ -28,7 +28,7 @@ import { useDb } from '../../db/useDb';
 import { getLogEvents, logEvent } from '../../db/log';
 import { useUiStore } from '../../state/ui';
 import { useTasksStore } from '../../state/tasks';
-import { dark, hitSlop12, hitSlop8, light, Priority, radius, space, type } from '../../theme/tokens';
+import { dark, hitSlop12, hitSlop8, light, Priority, priorityRuleColor, radius, space, type } from '../../theme/tokens';
 import { PressableScale } from '../../components/PressableScale';
 import { MetallicText } from '../../components/MetallicText';
 import { Card } from '../../components/Card';
@@ -840,7 +840,7 @@ export default function CalendarScreen() {
                           {
                             backgroundColor: palette.bgSurface,
                             borderColor: palette.border,
-                            borderLeftColor: palette.priority[t.priority as Priority] ?? palette.border,
+                            borderLeftColor: priorityRuleColor(t.priority as Priority, palette) ?? palette.border,
                           },
                         ]}
                       >
@@ -1102,7 +1102,6 @@ export default function CalendarScreen() {
       <Sheet
         visible={movingTask !== null}
         onClose={() => setMovingTask(null)}
-        palette={palette}
         title="Move Task to Day"
       >
         {movingTask ? (
@@ -1151,7 +1150,6 @@ export default function CalendarScreen() {
             <Button
               label="Cancel"
               variant="ghost"
-              palette={palette}
               onPress={() => setMovingTask(null)}
               fullWidth
             />
