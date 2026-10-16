@@ -35,6 +35,7 @@ const TYPE_FILTERS: ('all' | LogEventType)[] = [
   'timer_session_started',
   'timer_session_ended',
   'edited',
+  'deleted',
   'override',
   'exported',
   'streak_milestone',

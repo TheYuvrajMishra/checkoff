@@ -8,7 +8,7 @@
  *   no update/delete API at all).
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export interface Migration {
   version: number;
@@ -107,6 +107,18 @@ export const MIGRATIONS: Migration[] = [
     sql: `
 ALTER TABLE task_instances ADD COLUMN skill_id TEXT REFERENCES skills(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_instances_skill ON task_instances(skill_id);
+`,
+  },
+  {
+    version: 3,
+    description: 'Task priorities on templates and instances; soft-delete flag on instances',
+    sql: `
+ALTER TABLE task_templates ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'
+  CHECK (priority IN ('low','medium','high'));
+ALTER TABLE task_instances ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'
+  CHECK (priority IN ('low','medium','high'));
+ALTER TABLE task_instances ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_instances_deleted ON task_instances(date, deleted);
 `,
   },
 ];

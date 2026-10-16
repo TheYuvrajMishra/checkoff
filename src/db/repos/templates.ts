@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { Recurrence, TaskTemplate } from '../types';
+import type { Recurrence, TaskPriority, TaskTemplate } from '../types';
 import { logEvent } from '../log';
 import { newId } from '../ids';
 import { nowUtcIso } from '../time';
@@ -13,6 +13,15 @@ export interface NewTemplate {
   targetDate?: string | null;
   alarmTime?: string | null;
   isRitual?: boolean;
+  priority?: TaskPriority;
+}
+
+const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high'];
+
+function validatePriority(p: TaskPriority | undefined | null): TaskPriority {
+  if (p === undefined || p === null) return 'medium';
+  if (!PRIORITIES.includes(p)) throw new Error('priority must be low, medium or high.');
+  return p;
 }
 
 function rowToTemplate(row: Record<string, unknown>): TaskTemplate {
@@ -35,6 +44,7 @@ function rowToTemplate(row: Record<string, unknown>): TaskTemplate {
     targetDate: (row.target_date as string) ?? null,
     alarmTime: (row.alarm_time as string) ?? null,
     isRitual: (row.is_ritual as number) === 1,
+    priority: (row.priority as TaskPriority) ?? 'medium',
     enabled: (row.enabled as number) === 1,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -99,6 +109,7 @@ export async function createTemplate(
   }
 
   const alarmTime = validateAlarmTime(input.alarmTime ?? null);
+  const priority = validatePriority(input.priority);
 
   const categoryId = input.categoryId ?? null;
   if (categoryId) {
@@ -114,8 +125,8 @@ export async function createTemplate(
   await db.runAsync(
     `INSERT INTO task_templates
        (id, title, category_id, duration_min, recurrence, custom_days, target_date,
-        alarm_time, is_ritual, enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        alarm_time, is_ritual, priority, enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     id,
     title,
     categoryId,
@@ -125,6 +136,7 @@ export async function createTemplate(
     targetDate,
     alarmTime,
     input.isRitual ? 1 : 0,
+    priority,
     now,
     now
   );
@@ -141,6 +153,7 @@ export async function createTemplate(
       targetDate,
       alarmTime,
       isRitual: !!input.isRitual,
+      priority,
     },
   });
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -159,7 +172,7 @@ export async function updateTemplate(
   patch: TemplatePatch
 ): Promise<void> {
   const sets: string[] = [];
-  const params: Array<string | number | null> = [];
+  const params: (string | number | null)[] = [];
 
   if (patch.title !== undefined) {
     const title = patch.title.trim();
@@ -227,6 +240,10 @@ export async function updateTemplate(
   if (patch.isRitual !== undefined) {
     sets.push('is_ritual = ?');
     params.push(patch.isRitual ? 1 : 0);
+  }
+  if (patch.priority !== undefined) {
+    sets.push('priority = ?');
+    params.push(validatePriority(patch.priority));
   }
   if (patch.enabled !== undefined) {
     sets.push('enabled = ?');

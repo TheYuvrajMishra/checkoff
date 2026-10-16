@@ -12,10 +12,13 @@ import Svg, { Circle } from 'react-native-svg';
 import { CalendarPlus } from 'lucide-react-native';
 import { useTasksDb, useTasksStore } from '../../state/tasks';
 import { useUiStore } from '../../state/ui';
-import { dark, light, categoryColor, type, radius, space, TAP, type ThemePalette } from '../../theme/tokens';
+import { dark, light, type, radius, space, TAP, type ThemePalette } from '../../theme/tokens';
 import { AddTaskSheet } from '../../components/AddTaskSheet';
 import { EmptyState } from '../../components/EmptyState';
 import { Fab } from '../../components/Fab';
+import { TaskActionSheet } from '../../components/TaskActionSheet';
+import { TaskRow } from '../../components/TaskRow';
+import type { TaskInstanceEx } from '../../db/repos/instances';
 import {
   addDays,
   localDateString,
@@ -83,6 +86,10 @@ export default function TodayScreen() {
   const [catTokens, setCatTokens] = useState<Map<string, string>>(new Map());
   const [onTime, setOnTime] = useState<OnTimeStats>({ done: 0, planned: 0, onTimePct: null });
   const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [menuInstance, setMenuInstance] = useState<TaskInstance | null>(null);
+  const [menuInitialView, setMenuInitialView] = useState<'menu' | 'reschedule'>('menu');
+  const [editingInstance, setEditingInstance] = useState<TaskInstanceEx | null>(null);
+  const [editSheetOpen, setEditSheetOpen] = useState(false);
 
   // Live clock.
   useEffect(() => {
@@ -240,9 +247,38 @@ export default function TodayScreen() {
   const tasks = instances.filter((i) => !i.isRitual);
 
   const nowHHMM = localTimeString(now);
+  const todayStr = localDateString();
   const pendingTasks = tasks.filter((t) => t.status === 'pending');
   const nextUp =
     pendingTasks.find((t) => t.alarmTime && t.alarmTime >= nowHHMM) ?? pendingTasks[0] ?? null;
+
+  /** Overdue: pending, scheduled for today, alarm time already passed. */
+  const isOverdue = useCallback(
+    (t: TaskInstance) =>
+      t.status === 'pending' &&
+      t.alarmTime != null &&
+      date === todayStr &&
+      t.alarmTime < nowHHMM,
+    [date, todayStr, nowHHMM]
+  );
+
+  const openMenu = useCallback((item: TaskInstance) => {
+    setMenuInitialView('menu');
+    setMenuInstance(item);
+  }, []);
+
+  const openReschedule = useCallback((item: TaskInstance) => {
+    setMenuInitialView('reschedule');
+    setMenuInstance(item);
+  }, []);
+
+  const handleEdit = useCallback((item: TaskInstance) => {
+    setMenuInstance(null);
+    // The store holds plain TaskInstance rows; AddTaskSheet needs the Ex
+    // subtype for prefill. The extra fields are absent here, so build it.
+    setEditingInstance({ ...item, skillId: null } as TaskInstanceEx);
+    setEditSheetOpen(true);
+  }, []);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -333,8 +369,11 @@ export default function TodayScreen() {
               theme={theme}
               categoryToken={t.categoryId ? catTokens.get(t.categoryId) : undefined}
               isNext={nextUp?.id === t.id}
+              overdue={isOverdue(t)}
               onToggle={() => handleToggle(t)}
               onSkip={() => handleSkip(t.id)}
+              onReschedule={() => openReschedule(t)}
+              onLongPress={() => openMenu(t)}
             />
           ))
         )}
@@ -405,6 +444,24 @@ export default function TodayScreen() {
         onClose={() => setAddSheetOpen(false)}
         initialDate={date}
         onAdded={handleTaskAdded}
+      />
+      <AddTaskSheet
+        visible={editSheetOpen}
+        onClose={() => {
+          setEditSheetOpen(false);
+          setEditingInstance(null);
+        }}
+        editing={editingInstance}
+        onEdited={() => {
+          setEditSheetOpen(false);
+          setEditingInstance(null);
+        }}
+      />
+      <TaskActionSheet
+        instance={menuInstance}
+        initialView={menuInitialView}
+        onClose={() => setMenuInstance(null)}
+        onEdit={handleEdit}
       />
     </SafeAreaView>
   );
@@ -499,79 +556,6 @@ function RitualRow({
         {item.title}
       </Text>
     </Pressable>
-  );
-}
-
-function TaskRow({
-  item,
-  theme,
-  categoryToken,
-  isNext,
-  onToggle,
-  onSkip,
-}: {
-  item: TaskInstance;
-  theme: ThemePalette;
-  categoryToken?: string;
-  isNext: boolean;
-  onToggle: () => void;
-  onSkip: () => void;
-}) {
-  return (
-    <View
-      style={[
-        styles.taskRow,
-        {
-          backgroundColor: theme.surface,
-          borderColor: theme.border,
-          borderLeftWidth: isNext ? 3 : 0,
-          borderLeftColor: theme.accent,
-        },
-      ]}
-    >
-      <Pressable onPress={onToggle} style={styles.taskMain} hitSlop={4}>
-        {isNext && (
-          <Text style={[styles.nextCaption, { color: theme.accent }]}>NEXT</Text>
-        )}
-        <View style={styles.taskLine}>
-          <Text style={[styles.mono, { color: theme.textDim }]}>
-            {item.alarmTime ?? '--:--'}
-          </Text>
-          <View
-            style={[styles.dot, { backgroundColor: categoryColor(categoryToken ?? 'slate') }]}
-          />
-          <Text
-            style={[
-              styles.body,
-              {
-                flex: 1,
-                color: item.status === 'done' ? theme.textFaint : theme.text,
-                textDecorationLine: item.status === 'done' ? 'line-through' : 'none',
-              },
-            ]}
-          >
-            {item.title}
-          </Text>
-          <Text style={[styles.mono, { color: theme.textFaint }]}>
-            {item.durationMin}m
-          </Text>
-        </View>
-        {item.status !== 'pending' && (
-          <Text style={[styles.small, { color: theme.textFaint }]}>
-            {item.status}
-          </Text>
-        )}
-      </Pressable>
-      {item.status === 'pending' && (
-        <Pressable
-          onPress={onSkip}
-          style={[styles.skipBtn, { minHeight: TAP }]}
-          hitSlop={8}
-        >
-          <Text style={[styles.small, { color: theme.textFaint }]}>Skip</Text>
-        </Pressable>
-      )}
-    </View>
   );
 }
 

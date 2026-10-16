@@ -45,8 +45,8 @@ export async function ensureInstancesForDate(
     const result = await db.runAsync(
       `INSERT OR IGNORE INTO task_instances
          (id, template_id, date, title, category_id, duration_min, alarm_time,
-          is_ritual, status, skill_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)`,
+          is_ritual, priority, status, skill_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)`,
       id,
       t.id,
       date,
@@ -55,6 +55,7 @@ export async function ensureInstancesForDate(
       t.durationMin,
       t.alarmTime,
       t.isRitual ? 1 : 0,
+      t.priority ?? 'medium',
       now,
       now
     );
@@ -79,7 +80,7 @@ export async function markPastDueMissed(
   today: string
 ): Promise<void> {
   const rows = await db.getAllAsync<{ id: string }>(
-    `SELECT id FROM task_instances WHERE date < ? AND status = 'pending'`,
+    `SELECT id FROM task_instances WHERE date < ? AND status = 'pending' AND deleted = 0`,
     today
   );
   for (const row of rows) {

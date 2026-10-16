@@ -410,7 +410,9 @@ function rowToInstance(row: Record<string, unknown>): TaskInstance {
     durationMin: (row.duration_min as number) ?? 30,
     alarmTime: (row.alarm_time as string) ?? null,
     isRitual: (row.is_ritual as number) === 1,
+    priority: (row.priority as TaskInstance['priority']) ?? 'medium',
     status: row.status as InstanceStatus,
+    deleted: (row.deleted as number) === 1,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };

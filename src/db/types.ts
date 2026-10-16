@@ -7,6 +7,7 @@
 
 export type Recurrence = 'daily' | 'weekdays' | 'custom' | 'once';
 export type InstanceStatus = 'pending' | 'done' | 'skipped' | 'missed';
+export type TaskPriority = 'low' | 'medium' | 'high';
 export type EventActor = 'user' | 'alarm' | 'auto' | 'system';
 export type TimerMode = 'countdown' | 'stopwatch';
 
@@ -22,6 +23,7 @@ export type LogEventType =
   | 'unchecked'
   | 'skipped'
   | 'missed'
+  | 'deleted'
   | 'override'
   | 'exported'
   | 'streak_milestone'
@@ -59,6 +61,8 @@ export interface TaskTemplate {
   /** Local alarm time "HH:MM" (24h). Null = no alarm. */
   alarmTime: string | null;
   isRitual: boolean;
+  /** Task priority. Defaults to 'medium'. */
+  priority: TaskPriority;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -74,7 +78,11 @@ export interface TaskInstance {
   durationMin: number;
   alarmTime: string | null;
   isRitual: boolean;
+  /** Task priority. Defaults to 'medium'. */
+  priority: TaskPriority;
   status: InstanceStatus;
+  /** Soft delete — deleted rows stay in the DB and are excluded from reads. */
+  deleted: boolean;
   createdAt: string;
   updatedAt: string;
 }

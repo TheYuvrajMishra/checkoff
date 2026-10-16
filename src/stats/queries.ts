@@ -9,7 +9,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { LogEvent, TaskInstance, TimerSession } from '../db/types';
 
-/** Explicit column list for task_instances — no skill_id (v2 column). */
+/** Explicit column list for task_instances — priority/deleted added in v3,
+ *  skill_id in v2. Every SELECT lists explicit columns so queries cannot
+ *  crash on an older database. */
 const INSTANCE_COLS = [
   'id',
   'template_id',
@@ -19,7 +21,9 @@ const INSTANCE_COLS = [
   'duration_min',
   'alarm_time',
   'is_ritual',
+  'priority',
   'status',
+  'deleted',
   'created_at',
   'updated_at',
 ].join(', ');
@@ -34,7 +38,9 @@ function mapInstance(row: Record<string, unknown>): TaskInstance {
     durationMin: Number(row.duration_min ?? 0),
     alarmTime: (row.alarm_time as string) ?? null,
     isRitual: (row.is_ritual as number) === 1,
+    priority: (row.priority as TaskInstance['priority']) ?? 'medium',
     status: row.status as TaskInstance['status'],
+    deleted: (row.deleted as number) === 1,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -60,7 +66,7 @@ export async function instancesInRange(
 ): Promise<TaskInstance[]> {
   const rows = await db.getAllAsync<Record<string, unknown>>(
     `SELECT ${INSTANCE_COLS} FROM task_instances
-     WHERE date BETWEEN ? AND ?
+     WHERE date BETWEEN ? AND ? AND deleted = 0
      ORDER BY date ASC, alarm_time ASC`,
     fromDate,
     toDate
@@ -82,7 +88,7 @@ export async function daySummary(db: SQLiteDatabase, date: string): Promise<DayS
             SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done,
             SUM(is_ritual) AS rituals_total,
             SUM(CASE WHEN is_ritual = 1 AND status = 'done' THEN 1 ELSE 0 END) AS rituals_done
-     FROM task_instances WHERE date = ?`,
+     FROM task_instances WHERE date = ? AND deleted = 0`,
     date
   );
   return {
@@ -107,7 +113,7 @@ export async function monthSummary(
             COUNT(*) AS total,
             SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done
      FROM task_instances
-     WHERE date LIKE ?
+     WHERE date LIKE ? AND deleted = 0
      GROUP BY date`,
     `${prefix}%`
   );

@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import type { Category, Recurrence } from '../db/types';
+import type { Category, Recurrence, TaskPriority } from '../db/types';
 import { CATEGORY_TOKENS, categoryColor, dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import { addDays, localDateString } from '../db/time';
 import { useUiStore } from '../state/ui';
@@ -26,6 +26,7 @@ export interface TaskFormValues {
   minute: number;
   durationMin: number;
   isRitual: boolean;
+  priority: TaskPriority;
 }
 
 interface Props {
@@ -33,6 +34,8 @@ interface Props {
   /** Show the free "instance date" stepper (add-task). Hidden in onboarding. */
   showInstanceDate: boolean;
   initialDate?: string;
+  /** Prefill for edit mode. */
+  initialValues?: Partial<TaskFormValues>;
   submitLabel: string;
   onSubmit: (v: TaskFormValues) => void;
 }
@@ -45,20 +48,27 @@ const RECURRENCES: Array<{ key: Recurrence; label: string }> = [
   { key: 'once', label: 'One-off' },
 ];
 
+const PRIORITY_OPTIONS: Array<{ key: TaskPriority; label: string }> = [
+  { key: 'low', label: 'Low' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'high', label: 'High' },
+];
+
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
-export function TaskForm({ categories, showInstanceDate, initialDate, submitLabel, onSubmit }: Props) {
+export function TaskForm({ categories, showInstanceDate, initialDate, initialValues, submitLabel, onSubmit }: Props) {
   const theme: ThemePalette = useUiStore((s) => (s.theme === 'light' ? light : dark));
-  const [title, setTitle] = useState('');
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [recurrence, setRecurrence] = useState<Recurrence>('daily');
-  const [customDays, setCustomDays] = useState<number[]>([]);
-  const [date, setDate] = useState(initialDate ?? localDateString());
-  const [alarmEnabled, setAlarmEnabled] = useState(true);
-  const [hour, setHour] = useState(7);
-  const [minute, setMinute] = useState(0);
-  const [durationMin, setDurationMin] = useState(30);
-  const [isRitual, setIsRitual] = useState(false);
+  const [title, setTitle] = useState(initialValues?.title ?? '');
+  const [categoryId, setCategoryId] = useState<string | null>(initialValues?.categoryId ?? null);
+  const [recurrence, setRecurrence] = useState<Recurrence>(initialValues?.recurrence ?? 'daily');
+  const [customDays, setCustomDays] = useState<number[]>(initialValues?.customDays ?? []);
+  const [date, setDate] = useState(initialValues?.date ?? initialDate ?? localDateString());
+  const [alarmEnabled, setAlarmEnabled] = useState(initialValues?.alarmEnabled ?? true);
+  const [hour, setHour] = useState(initialValues?.hour ?? 7);
+  const [minute, setMinute] = useState(initialValues?.minute ?? 0);
+  const [durationMin, setDurationMin] = useState(initialValues?.durationMin ?? 30);
+  const [isRitual, setIsRitual] = useState(initialValues?.isRitual ?? false);
+  const [priority, setPriority] = useState<TaskPriority>(initialValues?.priority ?? 'medium');
   const [error, setError] = useState<string | null>(null);
 
   const toggleDay = (d: number) =>
@@ -85,6 +95,7 @@ export function TaskForm({ categories, showInstanceDate, initialDate, submitLabe
       minute,
       durationMin,
       isRitual,
+      priority,
     });
   };
 
@@ -164,6 +175,19 @@ export function TaskForm({ categories, showInstanceDate, initialDate, submitLabe
           <NativeTimeButton theme={theme} hour={hour} minute={minute} onChange={(h, m) => { setHour(h); setMinute(m); }} />
         </View>
       )}
+
+      <Text style={[styles.caption, { color: theme.textFaint }]}>PRIORITY</Text>
+      <View style={styles.chips}>
+        {PRIORITY_OPTIONS.map((p) => (
+          <Chip
+            key={p.key}
+            theme={theme}
+            label={p.label}
+            selected={priority === p.key}
+            onPress={() => setPriority(p.key)}
+          />
+        ))}
+      </View>
 
       <View style={styles.stepperRow}>
         <NumStepper theme={theme} label="Duration" value={durationMin} min={5} max={480} step={5} onChange={setDurationMin} suffix=" min" />

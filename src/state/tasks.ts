@@ -7,9 +7,15 @@ import {
   instancesForDate,
   setInstanceStatus,
   createInstance,
+  updateInstance,
+  duplicateInstance,
+  softDeleteInstance,
+  rescheduleInstance,
+  type InstancePatch,
+  type NewInstance,
+  type TaskInstanceEx,
 } from '../db/repos/instances';
 import { cancelTaskAlarm } from '../notifications';
-import type { NewInstance, TaskInstanceEx } from '../db/repos/instances';
 import { localDateString } from '../db/time';
 
 let db: SQLiteDatabase | null = null;
@@ -53,6 +59,10 @@ interface TasksState {
   toggleDone: (id: string) => Promise<void>;
   skipTask: (id: string) => Promise<void>;
   addManual: (input: NewInstance) => Promise<void>;
+  updateTask: (id: string, patch: InstancePatch) => Promise<void>;
+  duplicateTask: (id: string) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  rescheduleTask: (id: string, date: string) => Promise<void>;
 }
 
 export const useTasksStore = create<TasksState>()((set, get) => ({
@@ -111,6 +121,45 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
       await get().refresh(input.date ?? get().date);
     } catch (e) {
       console.error('[tasks] addManual failed', e);
+    }
+  },
+
+  updateTask: async (id: string, patch: InstancePatch) => {
+    try {
+      await updateInstance(requireDb(), id, patch);
+      void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      await get().refresh();
+    } catch (e) {
+      console.error('[tasks] updateTask failed', e);
+    }
+  },
+
+  duplicateTask: async (id: string) => {
+    try {
+      await duplicateInstance(requireDb(), id);
+      await get().refresh();
+    } catch (e) {
+      console.error('[tasks] duplicateTask failed', e);
+    }
+  },
+
+  deleteTask: async (id: string) => {
+    try {
+      await softDeleteInstance(requireDb(), id);
+      void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      await get().refresh();
+    } catch (e) {
+      console.error('[tasks] deleteTask failed', e);
+    }
+  },
+
+  rescheduleTask: async (id: string, date: string) => {
+    try {
+      await rescheduleInstance(requireDb(), id, date);
+      void cancelTaskAlarm(requireDb(), id).catch(() => {});
+      await get().refresh();
+    } catch (e) {
+      console.error('[tasks] rescheduleTask failed', e);
     }
   },
 }));

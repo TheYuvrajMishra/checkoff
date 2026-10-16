@@ -23,7 +23,7 @@ import { useUiStore } from '../state/ui';
 import { dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import { listCategories } from '../db/repos/categories';
 import { createTemplate } from '../db/repos/templates';
-import { createInstance } from '../db/repos/instances';
+import { createInstance, type InstancePatch, type TaskInstanceEx } from '../db/repos/instances';
 import { localDateString } from '../db/time';
 import { TaskForm, type TaskFormValues } from './TaskForm';
 import type { Category } from '../db/types';
@@ -35,18 +35,51 @@ interface Props {
   onClose: () => void;
   /** Prefill the form's date. Defaults to today. */
   initialDate?: string;
+  /** Edit mode: prefill the form from this instance and update it on submit. */
+  editing?: TaskInstanceEx | null;
   /** Called with the chosen date after a task was added. */
   onAdded?: (date: string) => void;
+  /** Called after an edit was saved. */
+  onEdited?: () => void;
 }
 
-export function AddTaskSheet({ visible, onClose, initialDate, onAdded }: Props) {
+function alarmToHourMin(alarmTime: string | null): { hour: number; minute: number } {
+  if (!alarmTime) return { hour: 7, minute: 0 };
+  const m = /^(\d{2}):(\d{2})$/.exec(alarmTime);
+  if (!m) return { hour: 7, minute: 0 };
+  return { hour: Number(m[1]), minute: Number(m[2]) };
+}
+
+export function AddTaskSheet({ visible, onClose, initialDate, editing, onAdded, onEdited }: Props) {
   const db = useTasksDb();
   const theme: ThemePalette = useUiStore((s) => (s.theme === 'light' ? light : dark));
   const refresh = useTasksStore((s) => s.refresh);
+  const updateTask = useTasksStore((s) => s.updateTask);
   const [categories, setCategories] = useState<Category[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formKey, setFormKey] = useState(0);
+
+  const isEditing = !!editing;
+
+  const initialValues: Partial<TaskFormValues> | undefined = editing
+    ? (() => {
+        const { hour, minute } = alarmToHourMin(editing.alarmTime);
+        return {
+          title: editing.title,
+          categoryId: editing.categoryId,
+          recurrence: 'once' as const,
+          customDays: [],
+          date: editing.date,
+          alarmEnabled: editing.alarmTime !== null,
+          hour,
+          minute,
+          durationMin: editing.durationMin,
+          isRitual: editing.isRitual,
+          priority: editing.priority ?? 'medium',
+        };
+      })()
+    : undefined;
 
   // Entrance slide + drag-down-to-dismiss offset (native driver).
   const enterY = useRef(new Animated.Value(560)).current;
@@ -107,6 +140,20 @@ export function AddTaskSheet({ visible, onClose, initialDate, onAdded }: Props) 
     if (busy) return;
     setBusy(true);
     try {
+      if (editing) {
+        const patch: InstancePatch = {
+          title: v.title,
+          categoryId: v.categoryId,
+          durationMin: v.durationMin,
+          alarmTime: v.alarmEnabled ? `${pad2(v.hour)}:${pad2(v.minute)}` : null,
+          priority: v.priority,
+        };
+        await updateTask(editing.id, patch);
+        setError(null);
+        onEdited?.();
+        onClose();
+        return;
+      }
       const template = await createTemplate(db, {
         title: v.title,
         categoryId: v.categoryId,
@@ -117,6 +164,7 @@ export function AddTaskSheet({ visible, onClose, initialDate, onAdded }: Props) 
         targetDate: v.recurrence === 'once' ? v.date : null,
         alarmTime: v.alarmEnabled ? `${pad2(v.hour)}:${pad2(v.minute)}` : null,
         isRitual: v.isRitual,
+        priority: v.priority,
       });
       await createInstance(db, {
         templateId: template.id,
@@ -126,6 +174,7 @@ export function AddTaskSheet({ visible, onClose, initialDate, onAdded }: Props) 
         durationMin: v.durationMin,
         alarmTime: v.alarmEnabled ? `${pad2(v.hour)}:${pad2(v.minute)}` : null,
         isRitual: v.isRitual,
+        priority: v.priority,
       });
       setError(null);
       await refresh(v.date);
@@ -166,7 +215,9 @@ export function AddTaskSheet({ visible, onClose, initialDate, onAdded }: Props) 
           <View style={styles.handleZone} {...panResponder.panHandlers}>
             <View style={[styles.handle, { backgroundColor: theme.border }]} />
             <View style={styles.header}>
-              <Text style={[styles.h2, { color: theme.text }]}>New task</Text>
+              <Text style={[styles.h2, { color: theme.text }]}>
+                {isEditing ? 'Edit task' : 'New task'}
+              </Text>
               <Pressable
                 onPress={onClose}
                 style={[styles.closeBtn, { borderColor: theme.border }]}
@@ -186,9 +237,10 @@ export function AddTaskSheet({ visible, onClose, initialDate, onAdded }: Props) 
             <TaskForm
               key={formKey}
               categories={categories}
-              showInstanceDate
+              showInstanceDate={!isEditing}
               initialDate={initialDate ?? localDateString()}
-              submitLabel={busy ? 'Adding…' : 'Add task'}
+              initialValues={initialValues}
+              submitLabel={isEditing ? (busy ? 'Saving…' : 'Save changes') : busy ? 'Adding…' : 'Add task'}
               onSubmit={submit}
             />
             {error && <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>}
