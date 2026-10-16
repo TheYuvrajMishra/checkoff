@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Switch,
@@ -7,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import type { Category, Recurrence } from '../db/types';
 import { CATEGORY_TOKENS, categoryColor, dark, light, radius, space, TAP, type, type ThemePalette } from '../theme/tokens';
 import { addDays, localDateString } from '../db/time';
@@ -157,12 +159,9 @@ export function TaskForm({ categories, showInstanceDate, initialDate, submitLabe
       </View>
 
       {alarmEnabled && (
-        <View style={styles.stepperRow}>
-          <NumStepper theme={theme} label="Hour" value={hour} min={0} max={23} onChange={setHour} />
-          <NumStepper theme={theme} label="Min" value={minute} min={0} max={59} step={5} onChange={setMinute} />
-          <Text style={[styles.timePreview, { color: theme.text }]}>
-            {pad2(hour)}:{pad2(minute)}
-          </Text>
+        <View style={styles.timePickerRow}>
+          <Text style={[styles.small, { color: theme.textDim }]}>Alarm time</Text>
+          <NativeTimeButton theme={theme} hour={hour} minute={minute} onChange={(h, m) => { setHour(h); setMinute(m); }} />
         </View>
       )}
 
@@ -274,6 +273,52 @@ export function NumStepper({
   );
 }
 
+export function NativeTimeButton({
+  theme,
+  hour,
+  minute,
+  onChange,
+}: {
+  theme: ThemePalette;
+  hour: number;
+  minute: number;
+  onChange: (h: number, m: number) => void;
+}) {
+  const [show, setShow] = useState(false);
+  const value = new Date();
+  value.setHours(hour, minute, 0, 0);
+
+  const onPick = (event: DateTimePickerEvent, selected?: Date) => {
+    // Android: dismiss on cancel; keep picker open on iOS.
+    if (Platform.OS === 'android') setShow(false);
+    if (event.type === 'set' && selected) {
+      onChange(selected.getHours(), selected.getMinutes());
+    }
+  };
+
+  return (
+    <View>
+      <Pressable
+        onPress={() => setShow(true)}
+        style={[styles.timeButton, { borderColor: theme.border, backgroundColor: theme.surface2 }]}
+      >
+        <Text style={[styles.timeButtonText, { color: theme.text, fontVariant: ['tabular-nums'] }]}>
+          {pad2(hour)}:{pad2(minute)}
+        </Text>
+      </Pressable>
+      {show && (
+        <DateTimePicker
+          value={value}
+          mode="time"
+          is24Hour={false}
+          display={Platform.OS === 'android' ? 'default' : 'spinner'}
+          onChange={onPick}
+        />
+      )}
+    </View>
+  );
+}
+
 export function DateStepper({
   theme,
   date,
@@ -373,6 +418,21 @@ const styles = StyleSheet.create({
   chipDot: { width: 8, height: 8, borderRadius: 4 },
   swatch: { width: TAP, height: TAP, borderRadius: TAP / 2, borderWidth: 2 },
   stepperRow: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
+  timePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: TAP,
+  },
+  timeButton: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: space(3),
+    paddingVertical: space(1.5),
+    minHeight: TAP,
+    justifyContent: 'center',
+  },
+  timeButtonText: { ...type.h2, fontVariant: ['tabular-nums'] },
   numStepper: { gap: space(0.5) },
   numRow: { flexDirection: 'row', alignItems: 'center', gap: space(1.5) },
   numBtn: {
