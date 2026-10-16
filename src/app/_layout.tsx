@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Appearance, AppState } from 'react-native';
 import { Stack, router, useSegments } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
-import * as SplashScreen from 'expo-splash-screen';
 import { migrateDb } from '../db/migrations';
 import { useDb } from '../db/useDb';
 import { getMeta, META_KEYS } from '../db/repos/meta';
@@ -33,10 +32,6 @@ import { reconcileTimers } from '../timers';
 import { configureHaptics } from '../haptics';
 import { UpdateBanner } from '../updates/UpdateBanner';
 import { updaterActions } from '../updates/updaterStore';
-import { AnimatedSplash } from '../components/AnimatedSplash';
-
-// Keep the native splash visible while we prepare the animated one.
-SplashScreen.preventAutoHideAsync().catch(() => {});
 
 /**
  * Startup data tasks. Every step is individually guarded so a failure
@@ -211,7 +206,6 @@ function Bootstrap({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   const themeName = useUiStore((s) => s.theme);
   const palette = themeName === 'light' ? light : dark;
-  const [splashDone, setSplashDone] = useState(false);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -241,7 +235,6 @@ export default function RootLayout() {
             <Stack.Screen name="day/[date]" />
           </Stack>
         </Bootstrap>
-        {!splashDone && <AnimatedSplash onDone={() => setSplashDone(true)} />}
       </SQLiteProvider>
     </GestureHandlerRootView>
   );
